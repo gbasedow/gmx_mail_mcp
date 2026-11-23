@@ -1,6 +1,6 @@
 # OFFENE-PUNKTE.md – Fragen an den Nutzer
 
-Stand 23.11.2026. Beantwortet sind bereits: Architektur (D2), Code-Basis (D1), Schutzmechanismen (D3), Zielclient (D4), Nr. 2–9 und 11–14 (D7–D16, 23.11.2026). Offen: nur Nr. 10 (Anhänge beim Senden) und Nr. 15 (Lizenz/Repo).
+Stand 23.11.2026. Beantwortet sind bereits: Architektur (D2), Code-Basis (D1), Schutzmechanismen (D3), Zielclient (D4), Nr. 2–9 und 11–14 (D7–D16, 23.11.2026). Alle Punkte sind beantwortet (Nr. 15: D18).
 Zu jeder Frage steht ein Vorschlag; ohne Antwort wird der Vorschlag umgesetzt, sobald der Punkt im Meilenstein dran ist.
 
 1. **Begriffe.** „HonorSystem“ = Home Assistant und „FTP zum Verschicken“ = SMTP? *Vorschlag: ja. FTP ist kein Mailprotokoll; GMX bietet nur IMAP und SMTP.*
@@ -16,7 +16,7 @@ Zu jeder Frage steht ein Vorschlag; ohne Antwort wird der Vorschlag umgesetzt, s
 8. ~~**Umfang „alle IMAP-Möglichkeiten“.**~~ **ERLEDIGT – D13.**  Zusätzlich zu den 21 Aktionen der Vorlage: `get_raw_message` (.eml), Threads, Ordner abonnieren, `.eml` hochladen (APPEND), `get_capabilities`, Keywords auflisten. Alles davon? Mailbox-weites `EXPUNGE` bleibt ausgeschlossen. *Vorschlag: ja, außer EXPUNGE.*
 9. ~~**Anhänge abrufen.**~~ **ERLEDIGT – siehe D10, D14 (Limit konfigurierbar, 10 MB).**
    (ursprüngliche Frage: Rückgabe als MCP-Inhalt (Bild/Blob, base64) mit Limit (Vorschlag 10 MB), zusätzlich Textextraktion (PDF/DOCX/XLSX), Teilabruf für große Dateien? *Vorschlag: Blob + Limit + optionaler Teilabruf; Textextraktion als eigener späterer Schritt.*)
-10. ~~**Anhänge beim Senden.**~~ **ERLEDIGT – D17 (direkt im Aufruf); offen nur das Upload-Limit (Vorschlag 1 MB).**
+10. ~~**Anhänge beim Senden.**~~ **ERLEDIGT – D17 (direkt im Aufruf); Upload-Limit konfigurierbar, Standard 10 MB.**
    (ursprüngliche Frage: Woher kommen Dateien? (a) nur Ordner `<media>/gmx_mail_mcp/outbox/` wie in der Vorlage, (b) base64 im Tool-Aufruf (Größen- und Kontextproblem), (c) Verweis auf eine Anhang-Referenz einer bestehenden Mail (weiterleiten). *Vorschlag: (a) und (c).*)
 11. ~~**Sensoren und Ereignisse.**~~ **ERLEDIGT – D15.**  Ungelesen-Zähler, Binary-Sensor und Ereignis „neue Mail“ aus der Vorlage übernehmen (IDLE-Verbindung bleibt dann dauerhaft offen)? *Vorschlag: ja, optional abschaltbar.*
 12. ~~**Voreinstellung der Schalter.**~~ **ERLEDIGT – Voreinstellung nur Lesen, D12.**  Nur Stufe R an? Soll `trash` (reversibel) schon in der Voreinstellung an sein? *Vorschlag: nur R.*
