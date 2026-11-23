@@ -82,7 +82,8 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 - Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python, Auswahl **[offen 9]**.
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.
-- Senden mit Anhang: Quelle der Datei **[offen 10]** (Vorlage: nur aus `<media>/gmx_mail/outbox/`).
+- Senden mit Anhang (D17): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (Vorschlag 1 MB, konfigurierbar),
+  Gesamtgröße der Nachricht gegen das Limit der Optionen und `APPENDLIMIT` prüfen. Dateiname bereinigen, Typ nach Inhalt prüfen.
 
 ## 6. Konfiguration
 
