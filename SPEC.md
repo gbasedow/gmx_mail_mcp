@@ -32,7 +32,7 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
   oder eine schlanke eigene JSON-RPC-Schicht verwendet wird, ist **[offen 7]** (Abhängigkeitskonflikte mit HA vermeiden).
 - **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
   Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Der Nutzer betreibt ha-mcp auf diese Weise (D8); trotzdem vor allem anderen per Spike prüfen (M0).
-- **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto.
+- **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto; ohne Sensoren keine dauerhafte IDLE-Verbindung (D15).
 
 ## 3. Tools (Vorschlag, Basis: 21 Aktionen der Vorlage)
 
@@ -44,7 +44,7 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `search` | R | Suche mit Feldern, Paginierung, Fallback für frische Mails (Indexverzögerung ≈ 30 s) |
 | `get_message` | R | Kopfzeilen, bereinigter Text, Anhangsliste; optional HTML (nur mit Option) |
 | `get_attachment` | R | **Ganze Datei** (siehe §5) |
-| `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) **[offen 8]** |
+| `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) (D13) |
 | `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus, Audit-Log |
 | `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel |
 | `create_folder`, `rename_folder` | O | Ordnerverwaltung |
@@ -53,7 +53,7 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `delete_permanently`, `delete_folder` | D | nur mit Option + Vorschau + Bestätigungscode (§4) |
 | `send_message`, `reply`, `forward`, `send_draft` | S | Versand-Modus `off`/`allowlist`/`any`, Vorschau + Code |
 
-Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
+Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
 `get_capabilities`, Keywords auflisten. Nicht aufgenommen: mailbox-weites `EXPUNGE`.
 
 ## 4. Sicherheit
@@ -62,7 +62,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`
 2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus.
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
-   Tools freischalten. Empfehlung: nur Options-Flow **[offen 5]**.
+   Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
 3. **Versand:** Allowlist/Modus, Empfänger- und Stundenlimit, Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
    Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist die Allowlist. Mit direktem MCP-Zugriff gibt es keine
    ha-mcp-Freigabe mehr – die Rückfrage übernimmt der Client (Claude fragt bei Connectoren standardmäßig vor Tool-Aufrufen).
@@ -77,8 +77,8 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`
 - `get_attachment` hat den Parameter `mode`: `text` (extrahierter Text), `file` (ganze Datei) oder `both` (D10).
   Die Datei geht ungekürzt an das LLM, nicht nur Text. Rückgabeform nach MCP: Bilder als `image`-Content, andere Dateien als
   eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
-- Größenlimit je Abruf als Option (Vorschlag 10 MB; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
-  Teilabruf per Offset/Länge **[offen 9]**.
+- Größenlimit je Abruf als Option (Voreinstellung 10 MB, D14; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
+  Teilabruf per Offset/Länge als spätere Erweiterung.
 - Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python, Auswahl **[offen 9]**.
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.

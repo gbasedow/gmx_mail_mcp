@@ -23,8 +23,8 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
   Entscheidung D1: Code wird **kopiert**, dieses Repo ist eigenständig (kein gemeinsames Paket).
 - **Übernommen (HA-frei, 313 Tests grün unter Python 3.14):** `client/` (IMAP-Worker, Reader, Writer, Deleter, Composer, SMTP, Sent,
   Policy, Sanitize, Structure, Folders, IDLE, Errors), `const.py`, `options.py`, `envelope.py`, `confirm.py`.
-- **Noch nicht vorhanden (zu bauen):** Config-Flow, MCP-Endpunkt, Tool-Registry mit Einzelschaltern, Token-/Benutzerprüfung,
-  Anhang-Auslieferung, Audit-Log, Sensoren/Ereignisse (optional). Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
+- **Noch nicht vorhanden (zu bauen):** Config-Flow (mehrere Konten, Tool-Schalter im Flow), MCP-Endpunkt, Tool-Registry, Token-/Benutzerprüfung,
+  Anhang-Auslieferung (Text und Datei), Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.
 
