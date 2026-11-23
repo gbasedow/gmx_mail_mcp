@@ -1,0 +1,13 @@
+# Development and test dependencies (Linux, Python 3.14).
+# The HA-free client layer is tested with plain pytest; the integration part (M-HA) adds
+# pytest-homeassistant-custom-component once the HTTP/MCP layer exists (see docs/DECISIONS.md).
+imapclient==4.3.0
+# Same pin as the Home Assistant core integration `imap` (avoids version conflicts).
+aioimaplib==2.0.3
+pytest>=8
+pytest-asyncio>=0.24
+pytest-cov>=5
+ruff>=0.17
+mypy>=2.4
+hypothesis==6.170.17
+cryptography>=43  # tools/make_test_certs.py

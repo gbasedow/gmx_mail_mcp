@@ -1,0 +1,313 @@
+{
+ "meta": {
+  "script": "gmx_probe.py",
+  "utc": "2026-11-20T15:34:17Z",
+  "python": "3.15.2"
+ },
+ "connect": {
+  "trust_source": "certifi",
+  "tls_version": "TLSv1.3",
+  "cipher": "TLS_AES_256_GCM_SHA384",
+  "cert_cn": "mail.gmx.net",
+  "cert_san_matches_host": true,
+  "greeting": "* OK [CAPABILITY IMAP4rev1 CHILDREN ENABLE ID IDLE LIST-EXTENDED LIST-STATUS LIT",
+  "capability_pre_login": [
+   "AUTH=LOGIN",
+   "AUTH=PLAIN",
+   "CHILDREN",
+   "ENABLE",
+   "ID",
+   "IDLE",
+   "IMAP4REV1",
+   "LIST-EXTENDED",
+   "LIST-STATUS",
+   "LITERAL-",
+   "MOVE",
+   "NAMESPACE",
+   "SASL-IR",
+   "SORT",
+   "SPECIAL-USE",
+   "THREAD=ORDEREDSUBJECT",
+   "UIDPLUS",
+   "UNSELECT",
+   "WITHIN"
+  ]
+ },
+ "login": {
+  "ok": true,
+  "seconds": 0.34
+ },
+ "capability_post_login": [
+  "APPENDLIMIT=29360128",
+  "CHILDREN",
+  "ENABLE",
+  "ID",
+  "IDLE",
+  "IMAP4REV1",
+  "LIST-EXTENDED",
+  "LIST-STATUS",
+  "LITERAL-",
+  "MOVE",
+  "NAMESPACE",
+  "SASL-IR",
+  "SORT",
+  "SPECIAL-USE",
+  "THREAD=ORDEREDSUBJECT",
+  "UIDPLUS",
+  "UNSELECT",
+  "WITHIN"
+ ],
+ "namespace": "((\"\" \"/\")) NIL NIL",
+ "folders": {
+  "count": 7,
+  "delimiter": "/",
+  "special_use_from_plain_list": {
+   "Entw\u00fcrfe": "\\Drafts",
+   "Gel\u00f6scht": "\\Trash",
+   "Gesendet": "\\Sent",
+   "Spamverdacht": "\\Junk"
+  },
+  "special_use_from_list_extended": {
+   "Entw\u00fcrfe": [
+    "\\Drafts",
+    "\\NoInferiors"
+   ],
+   "Gel\u00f6scht": [
+    "\\Trash"
+   ],
+   "Gesendet": [
+    "\\Sent",
+    "\\NoInferiors"
+   ],
+   "Spamverdacht": [
+    "\\Junk",
+    "\\NoInferiors"
+   ]
+  }
+ },
+ "status_inbox": "entfernt (Postfachzaehler)",
+ "test_folders": {
+  "create_A": "OK",
+  "create_B": "OK"
+ },
+ "create_test_folders": true,
+ "folder_tests": {
+  "append_1": {
+   "status": "OK",
+   "appenduid": [
+    1
+   ]
+  },
+  "append_2": {
+   "status": "OK",
+   "appenduid": [
+    2
+   ]
+  },
+  "select_a": "OK",
+  "permanentflags": [
+   "(\\Answered \\Flagged \\Draft \\Deleted \\Seen \\*)"
+  ],
+  "count_a": 2,
+  "search": {
+   "ascii_subject_Probe": {
+    "status": "OK",
+    "hits": 0
+   },
+   "ascii_subject_lowercase_probe": {
+    "status": "OK",
+    "hits": 0
+   },
+   "utf8_subject_Gruesse": {
+    "status": "OK",
+    "hits": 0
+   },
+   "utf8_subject_gruesse_lower": {
+    "status": "OK",
+    "hits": 0
+   },
+   "utf8_body_Uebung": {
+    "status": "OK",
+    "hits": 0
+   },
+   "utf8_text_Groesse": {
+    "status": "OK",
+    "hits": 0
+   },
+   "no_charset_body_ascii": {
+    "status": "OK",
+    "hits": 0
+   },
+   "no_charset_text_ascii": {
+    "status": "OK",
+    "hits": 0
+   },
+   "header_message_id": {
+    "status": "OK",
+    "hits": 0
+   },
+   "larger_10": {
+    "status": "OK",
+    "hits": 2
+   },
+   "smaller_1000000": {
+    "status": "OK",
+    "hits": 2
+   },
+   "since_yesterday": {
+    "status": "OK",
+    "hits": 2
+   },
+   "seen": {
+    "status": "OK",
+    "hits": 1
+   },
+   "unseen": {
+    "status": "OK",
+    "hits": 1
+   }
+  },
+  "search_index_delay": {
+   "polls": [
+    {
+     "t": 0.0,
+     "body_probe": 0,
+     "text_ascii": 0,
+     "subject_probe": 0
+    },
+    {
+     "t": 5.4,
+     "body_probe": 1,
+     "text_ascii": 1,
+     "subject_probe": 0
+    }
+   ]
+  },
+  "sort": {
+   "status": "OK",
+   "hits": 2
+  },
+  "custom_keyword": {
+   "store": "OK",
+   "keyword_search": {
+    "status": "OK",
+    "hits": 1
+   }
+  },
+  "system_flags_store": "OK",
+  "copy_to_b": {
+   "status": "OK",
+   "copyuid_seen": {
+    "tagged": true,
+    "in_untagged_store": true
+   }
+  },
+  "move_to_b": {
+   "status": "OK",
+   "copyuid_seen": {
+    "tagged": false,
+    "in_untagged_store": true
+   }
+  },
+  "count_a_after": 1,
+  "status_b": "HA-Probe-&AMQ-B (MESSAGES 2)",
+  "deleted_flag_visible": {
+   "status": "OK",
+   "hits": 1
+  },
+  "uid_expunge": {
+   "status": "OK",
+   "count_b_after": 1
+  },
+  "trash_move": {
+   "move_status": "OK",
+   "copyuid": {
+    "tagged": false,
+    "in_untagged_store": true
+   },
+   "trash_before": 5,
+   "trash_after_move": 6,
+   "our_message_in_trash": {
+    "status": "OK",
+    "hits": 0
+   },
+   "trash_after_cleanup": 6
+  }
+ },
+ "inbox_search_probe": {
+  "total": 3418,
+  "header_from_a": {
+   "status": "OK",
+   "hits": 2888,
+   "seconds": 1.1
+  },
+  "subject_e": {
+   "status": "OK",
+   "hits": 3395,
+   "seconds": 0.53
+  },
+  "body_e": {
+   "status": "OK",
+   "hits": 2666,
+   "seconds": 1.17
+  },
+  "text_e": {
+   "status": "OK",
+   "hits": 3418,
+   "seconds": 1.12
+  },
+  "since_30d": {
+   "status": "OK",
+   "hits": 450,
+   "seconds": 0.03
+  }
+ },
+ "smtp": {
+  "ehlo_pre_tls": [
+   "8bitmime",
+   "size",
+   "starttls"
+  ],
+  "ehlo_post_tls": [
+   "8bitmime",
+   "auth",
+   "size"
+  ],
+  "size_limit": "141557760",
+  "login": "ok"
+ },
+ "send_self_test": {
+  "smtp_send": {
+   "refused": 0
+  },
+  "copies": {
+   "INBOX": {
+    "copies_found": 1,
+    "via": "fetch_headers",
+    "after_s": 0.8
+   },
+   "sent[0]": {
+    "copies_found": 0,
+    "via": null,
+    "after_s": 64.4
+   }
+  },
+  "interpretation": "sent_copy_mode: 0 Kopien in Gesendet -> 'append' noetig; 1 Kopie -> 'none'/'server'; mehr -> Duplikate beachten"
+ },
+ "manage_sieve_port_4190": {
+  "imap.gmx.net": {
+   "open": false,
+   "reason": "TimeoutError"
+  },
+  "mail.gmx.net": {
+   "open": false,
+   "reason": "TimeoutError"
+  }
+ },
+ "cleanup": {
+  "rename_folder": "OK",
+  "delete_folder_1": "OK",
+  "delete_folder_2": "OK"
+ },
+ "_hinweis": "Lauf 3, 20.11.2026, mit --send-self-test. Im Papierkorb-Test blieb die Testmail liegen (Suche wegen Indexverzoegerung leer); Skript inzwischen behoben."
+}

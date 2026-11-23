@@ -1,0 +1,28 @@
+# Test servers - never a real mail account.
+#   docker compose up -d greenmail dovecot          -> pytest -p no:homeassistant -m integration tests/integration
+# Before the first start: python3 tools/make_test_certs.py (test CA for Dovecot, git-ignored)
+services:
+  greenmail:
+    image: greenmail/standalone:2.1.3
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.all -Dgreenmail.hostname=0.0.0.0
+        -Dgreenmail.users=test:secret@example.test -Dgreenmail.users.login=email
+    ports:
+      - "3143:3143"
+      - "3025:3025"
+
+  dovecot:
+    # GMX-like: GMX capabilities, Gesendet/Entwürfe/Gelöscht/Spamverdacht with SPECIAL-USE, TLS only (test CA).
+    image: dovecot/dovecot:2.4.1
+    environment:
+      USER_PASSWORD: secret
+    volumes:
+      - ./tests/integration/certs:/etc/dovecot/ssl:ro
+      - ./tests/integration/dovecot/gmx.conf:/etc/dovecot/conf.d/gmx.conf:ro
+    ports:
+      - "31993:31993"
+      - "31143:31143"
+      - "31587:31587"
+    depends_on:
+      - greenmail  # submission relays sent test mail to GreenMail

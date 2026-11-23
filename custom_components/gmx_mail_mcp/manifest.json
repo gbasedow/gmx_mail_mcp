@@ -1,0 +1,24 @@
+{
+  "domain": "gmx_mail_mcp",
+  "name": "GMX Mail MCP",
+  "codeowners": [
+    "@gbasedow"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
+  "documentation": "https://github.com/gbasedow/gmx_mail_mcp",
+  "integration_type": "service",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/gbasedow/gmx_mail_mcp/issues",
+  "loggers": [
+    "aioimaplib",
+    "imapclient"
+  ],
+  "requirements": [
+    "aioimaplib>=2.0.3",
+    "imapclient==4.3.0"
+  ],
+  "version": "0.0.1"
+}

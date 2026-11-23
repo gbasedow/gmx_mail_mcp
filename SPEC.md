@@ -1,0 +1,119 @@
+# SPEC.md – gmx_mail_mcp
+
+Entwurf vom 23.11.2026, abgeleitet aus Nutzervorgaben und der Vorlage `gbasedow/gmx_mail` (SPEC dort: Aktionen, Optionen, Sicherheit).
+Punkte, die noch zu klären sind, stehen in `docs/OFFENE-PUNKTE.md` und sind hier mit **[offen N]** markiert.
+
+## 1. Rahmen
+
+- Eine HA-Integration, ein Config-Entry je GMX-Konto. Sie stellt einen **MCP-Server über HTTP** bereit (Transport „Streamable HTTP“,
+  JSON-RPC 2.0; Methoden `initialize`, `ping`, `tools/list`, `tools/call`). Kein eigener Prozess, kein Add-on.
+- Umfang: alles, was IMAP und SMTP hergeben. Nicht möglich: Webmail-Filterregeln (kein ManageSieve, GMX-NOTES Zeile 24), Quota (keine QUOTA-Capability).
+- Zwei Schutzebenen: (1) Token, (2) Einzelschalter je Tool (§4).
+
+## 2. Architektur
+
+```
+Client (Claude / Claude Code)
+   │  HTTPS, Authorization: Bearer <HA Long-Lived Access Token>
+   ▼
+Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
+   │
+   ▼  HomeAssistantView  /api/gmx_mail_mcp/<entry_id>/mcp   (requires_auth = True)
+ mcp/server.py     JSON-RPC, Protokollversion, tools/list (nur eingeschaltete Tools), tools/call
+ mcp/tools/*.py    ein Modul je Tool-Gruppe; jedes Tool hat Name, Stufe (R/O/D/S), Schema, Handler
+ mcp/guard.py      Reihenfolge je Aufruf: Benutzerprüfung → Tool eingeschaltet? → Limits → Handler → Audit
+ client/*          IMAP/SMTP-Schicht (übernommen, HA-frei)
+```
+
+- **Token:** Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
+  (Long-Lived Access Tokens eingeschlossen) und lehnt ungültige Aufrufe mit 401 ab, bevor Integrationscode läuft. Zusätzlich prüft `guard.py` den Benutzer
+  (z. B. nur Administratoren oder ein bestimmter Benutzer, **[offen 6]**). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
+- **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Ob das offizielle `mcp`-Python-SDK
+  oder eine schlanke eigene JSON-RPC-Schicht verwendet wird, ist **[offen 7]** (Abhängigkeitskonflikte mit HA vermeiden).
+- **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
+  Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Vor allem anderen per Spike prüfen (M0, **[offen 4]**).
+- **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto.
+
+## 3. Tools (Vorschlag, Basis: 21 Aktionen der Vorlage)
+
+Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Namen im MCP: `gmx_<name>`.
+
+| Tool | Stufe | Inhalt |
+|---|---|---|
+| `list_folders` | R | Ordner mit Rollen (SPECIAL-USE) und Zählern |
+| `search` | R | Suche mit Feldern, Paginierung, Fallback für frische Mails (Indexverzögerung ≈ 30 s) |
+| `get_message` | R | Kopfzeilen, bereinigter Text, Anhangsliste; optional HTML (nur mit Option) |
+| `get_attachment` | R | **Ganze Datei** (siehe §5) |
+| `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) **[offen 8]** |
+| `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus, Audit-Log |
+| `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel |
+| `create_folder`, `rename_folder` | O | Ordnerverwaltung |
+| `save_draft` | O | Entwurf per APPEND |
+| `trash` | D | In den Papierkorb |
+| `delete_permanently`, `delete_folder` | D | nur mit Option + Vorschau + Bestätigungscode (§4) |
+| `send_message`, `reply`, `forward`, `send_draft` | S | Versand-Modus `off`/`allowlist`/`any`, Vorschau + Code |
+
+Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
+`get_capabilities`, Keywords auflisten. Nicht aufgenommen: mailbox-weites `EXPUNGE`.
+
+## 4. Sicherheit
+
+1. **Token:** nur gültige HA-Tokens, 401 sonst. Benutzerprüfung nach **[offen 6]**.
+2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus.
+   `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
+   **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
+   Tools freischalten. Empfehlung: nur Options-Flow **[offen 5]**.
+3. **Versand:** Allowlist/Modus, Empfänger- und Stundenlimit, Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
+   Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist die Allowlist. Mit direktem MCP-Zugriff gibt es keine
+   ha-mcp-Freigabe mehr – die Rückfrage übernimmt der Client (Claude fragt bei Connectoren standardmäßig vor Tool-Aufrufen).
+4. **Löschen:** Papierkorb zuerst; endgültig nur mit Option, nur Papierkorb/Spam, `UID EXPUNGE` genau dieser UIDs, Tageslimit.
+5. **Inhalte sind Daten:** Rahmen mit Zufallskennung, `content_trust`, Bereinigung versteckter Texte und unsichtbarer Zeichen (`client/sanitize.py`),
+   Angriffssammlung als Test (`tests/client/test_injection_corpus.py`). Das gilt auch für Anhänge (§5).
+6. **Audit-Log** je Aufruf (Tool, Zeit, Benutzer, Fingerabdruck der Parameter, Ergebnis; keine Inhalte).
+7. Keine Zugangsdaten in Logs, Diagnose und Antworten. Fehler als JSON-RPC-Fehler bzw. `isError` mit Übersetzungsschlüssel.
+
+## 5. Anhänge (Kernanforderung)
+
+- `get_attachment` liefert die **ganze Datei** an das LLM, nicht nur Text. Rückgabeform nach MCP: Bilder als `image`-Content, andere Dateien als
+  eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
+- Größenlimit je Abruf als Option (Vorschlag 10 MB; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
+  Teilabruf per Offset/Länge **[offen 9]**.
+- Optional Textextraktion (PDF, DOCX, XLSX) für einfache Weiterverarbeitung **[offen 9]**; Abhängigkeiten dafür nur reines Python.
+- Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
+  kein vollständiges Laden großer Nachrichten in den Speicher.
+- Senden mit Anhang: Quelle der Datei **[offen 10]** (Vorlage: nur aus `<media>/gmx_mail/outbox/`).
+
+## 6. Konfiguration
+
+- Config-Flow: E-Mail, App-Passwort, Hosts/Ports (Voreinstellung GMX), Prüfung von IMAP- und SMTP-Login. Reauth, Reconfigure, Options-Flow.
+- Optionen: `enabled_tools`, Versand-Modus, Allowlist, Limits (aus `const.py`/`options.py` der Vorlage), Größenlimit Anhänge, Ordner-Overrides, Audit-Aufbewahrung.
+- Endpunkt-URL und eine Kopiervorlage für die Client-Konfiguration werden im Options-Flow angezeigt (kein Token).
+
+## 7. Tests
+
+- `tests/client`: HA-freie Client-Schicht mit In-Memory-Fakes (313 Tests, Python 3.14) – **vorhanden**.
+- `tests/probe`: Probe-Skript gegen Fake-IMAP – vorhanden. `tests/integration`: GreenMail und GMX-naher Dovecot (TLS mit Test-CA) – vorhanden, für die CI noch zu verdrahten.
+- Neu: `tests/mcp` (Protokoll, Schalter, Guard, Fehlerfälle), `tests/ha` (Config-Flow, Endpunkt mit gültigem/ungültigem/fehlendem Token,
+  Admin/Nicht-Admin), Staging mit echtem HA im Container, Ende-zu-Ende mit einem MCP-Client (Bearer-Token).
+- Pflicht: ein Test je Tool, dass es im ausgeschalteten Zustand weder gelistet noch aufrufbar ist.
+
+## 8. Meilensteine
+
+| M | Inhalt |
+|---|---|
+| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Entscheidet **[offen 4]** und **[offen 7]**. |
+| M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
+| M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
+| M3 | Organisieren und Entwürfe (Stufe O). |
+| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. |
+| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. |
+| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
+
+Je Meilenstein: Tests grün, Bericht, Freigabe des Nutzers.
+
+## 9. Risiken
+
+- claude.ai-Connector und festes Bearer-Token (siehe §2). Fallback: Claude Code, anderer Client, oder OAuth-Schicht (großer Aufwand).
+- Direkter MCP-Zugriff umgeht die ha-mcp-Freigabe; daher Voreinstellung nur Lesen.
+- GMX: IMAP-Abschaltung bei Nichtnutzung (Frist unbekannt), Versandlimits unveröffentlicht, Suchindex ≈ 30 s verzögert (GMX-NOTES).
+- Große Anhänge belasten Speicher und Kontextfenster des LLM.
