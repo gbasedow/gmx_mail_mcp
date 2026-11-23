@@ -27,11 +27,11 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
 
 - **Token:** Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
   (Long-Lived Access Tokens eingeschlossen) und lehnt ungültige Aufrufe mit 401 ab, bevor Integrationscode läuft. Zusätzlich prüft `guard.py` den Benutzer
-  (z. B. nur Administratoren oder ein bestimmter Benutzer, **[offen 6]**). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
+  (nur der im Config-Flow gewählte Benutzer, D9). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
 - **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Ob das offizielle `mcp`-Python-SDK
   oder eine schlanke eigene JSON-RPC-Schicht verwendet wird, ist **[offen 7]** (Abhängigkeitskonflikte mit HA vermeiden).
 - **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
-  Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Vor allem anderen per Spike prüfen (M0, **[offen 4]**).
+  Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Der Nutzer betreibt ha-mcp auf diese Weise (D8); trotzdem vor allem anderen per Spike prüfen (M0).
 - **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto.
 
 ## 3. Tools (Vorschlag, Basis: 21 Aktionen der Vorlage)
@@ -58,7 +58,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`
 
 ## 4. Sicherheit
 
-1. **Token:** nur gültige HA-Tokens, 401 sonst. Benutzerprüfung nach **[offen 6]**.
+1. **Token:** nur gültige HA-Tokens, 401 sonst. Nur der gewählte HA-Benutzer (D9); Tokens anderer Benutzer werden mit 403 abgelehnt.
 2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus.
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
@@ -74,11 +74,12 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ **[offen 8]**: Threads (`
 
 ## 5. Anhänge (Kernanforderung)
 
-- `get_attachment` liefert die **ganze Datei** an das LLM, nicht nur Text. Rückgabeform nach MCP: Bilder als `image`-Content, andere Dateien als
+- `get_attachment` hat den Parameter `mode`: `text` (extrahierter Text), `file` (ganze Datei) oder `both` (D10).
+  Die Datei geht ungekürzt an das LLM, nicht nur Text. Rückgabeform nach MCP: Bilder als `image`-Content, andere Dateien als
   eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
 - Größenlimit je Abruf als Option (Vorschlag 10 MB; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
   Teilabruf per Offset/Länge **[offen 9]**.
-- Optional Textextraktion (PDF, DOCX, XLSX) für einfache Weiterverarbeitung **[offen 9]**; Abhängigkeiten dafür nur reines Python.
+- Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python, Auswahl **[offen 9]**.
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.
 - Senden mit Anhang: Quelle der Datei **[offen 10]** (Vorlage: nur aus `<media>/gmx_mail/outbox/`).
