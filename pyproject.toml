@@ -1,0 +1,39 @@
+[project]
+name = "gmx_mail_mcp"
+version = "0.0.0"
+requires-python = ">=3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "tools", "tests/probe"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "integration: needs docker compose (greenmail/dovecot)",
+]
+
+[tool.ruff]
+line-length = 140
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "SIM", "RUF", "PL", "SLF"]
+ignore = ["PLR2004", "PLR0913", "S101", "S603", "S607", "RUF001", "RUF003"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/gmx_probe.py" = ["PLR0911", "PLR0912", "PLR0915", "C901", "S110", "PLW0108", "PLW2901", "PLC0415", "E501", "SIM"]
+"tools/gmx_live_check.py" = ["SLF001", "PLR0915", "PLR0917", "PLC0415"]
+"tests/*" = ["S", "PLR0911", "PLR0912", "PLR0915", "C901", "SLF001"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+warn_unused_ignores = true
+mypy_path = ["tools", "tests/probe"]
+packages = ["custom_components.gmx_mail_mcp"]
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["imapclient", "imapclient.*", "aioimaplib", "aioimaplib.*"]
+ignore_missing_imports = true

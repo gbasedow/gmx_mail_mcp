@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+# Ergebnisse des Live-Tests nur bewusst einchecken (enthalten Ordnernamen/Zähler, keine Inhalte)
+gmx_probe_result*.json
+secrets.yaml
+
+# Throw-away test CA/certificates for the container mail server (tools/make_test_certs.py)
+tests/integration/certs/
+tests/staging/wheels/

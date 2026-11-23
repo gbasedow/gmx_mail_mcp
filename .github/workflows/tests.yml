@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: pip install -r requirements_dev.txt
+      - name: Ruff
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Mypy
+        run: mypy custom_components/gmx_mail_mcp
+      - name: Client tests
+        run: pytest -q tests/client
+      - name: Probe script tests
+        run: pytest -q tests/probe
+
+  server-tests:
+    # Read path, IDLE and sending against real servers: GreenMail and a GMX-like Dovecot (TLS with a test CA). Never a real mail account.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Install dependencies
+        run: pip install -r requirements_dev.txt
+      - name: Test certificates and servers
+        run: |
+          python tools/make_test_certs.py
+          docker compose up -d greenmail dovecot
+      - name: Wait for the servers
+        run: python tools/wait_for_test_servers.py greenmail dovecot
+      - name: Server tests
+        env:
+          REQUIRE_GREENMAIL: "1"
+          REQUIRE_DOVECOT: "1"
+        run: pytest -q -m integration tests/integration
+      - name: Server logs on failure
+        if: failure()
+        run: docker compose logs greenmail dovecot
