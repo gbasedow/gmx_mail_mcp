@@ -2,6 +2,8 @@
 # pytest-homeassistant-custom-component brings Home Assistant (2026.10.4 with this pin) for tests/ha.
 # Its pytest plugin blocks sockets: run tests/probe and tests/integration with `-p no:homeassistant` (see CLAUDE.md).
 imapclient==4.3.0
+# Text extraction from PDF attachments (D27); same pin as the manifest.
+pypdf==7.1.1
 # Same pin as the Home Assistant core integration `imap` (avoids version conflicts).
 aioimaplib==2.0.3
 pytest>=8
