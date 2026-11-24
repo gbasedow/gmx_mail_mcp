@@ -1,9 +1,9 @@
 """MCP endpoint (Streamable HTTP, stateless, POST only): ``/api/gmx_mail_mcp/<entry_id>/mcp``.
 
-Home Assistant authenticates the request before this view runs (``requires_auth``): only a valid access token
-(Bearer, long-lived tokens included) gets through, otherwise 401. POST is never authenticated by signed paths
-(HA accepts those for GET/HEAD only). This view then admits only the HA user chosen for the entry (D9); every
-other user gets 403. GET (server-sent events) and DELETE (sessions) are not offered: 405.
+Order per request: bearer token, checked with Home Assistant's own validation (``auth.py``, D25; 401 otherwise, real
+failures count for HA's IP ban) -> entry loaded (404) -> the HA user chosen for the entry (D9, 403 otherwise) -> transport
+rules. Authentication comes first, so without a token nothing is revealed about which entries exist. Tokens are read from the
+Authorization header only. GET (server-sent events) and DELETE (sessions) are not offered: 405.
 """
 
 from __future__ import annotations
@@ -15,10 +15,10 @@ from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
 from aiohttp import web
-from homeassistant.components.http.const import KEY_HASS_USER
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers.http import KEY_HASS, HomeAssistantView
 
+from .auth import AuthOutcome, async_unauthorized, authenticate
 from .const import DOMAIN
 from .mcp.protocol import SUPPORTED_PROTOCOL_VERSIONS, MessageKind, parse_error
 
@@ -44,21 +44,14 @@ class McpView(HomeAssistantView):
 
     url = MCP_URL
     name = "api:gmx_mail_mcp:mcp"
-    requires_auth = True
+    # Authentication is done in ``post`` with HA's validation, see auth.py (D25).
+    requires_auth = False
 
     async def post(self, request: web.Request, entry_id: str) -> web.Response:
         """Handle one JSON-RPC message."""
-        hass = request.app[KEY_HASS]
-        entry: GmxMailMcpConfigEntry | None = hass.config_entries.async_get_entry(entry_id)
-        # runtime_data survives an unload, so the state decides whether the endpoint is live.
-        if entry is None or entry.domain != DOMAIN or entry.state is not ConfigEntryState.LOADED:
-            return _plain(HTTPStatus.NOT_FOUND, "Unknown endpoint")
-
-        user: User = request[KEY_HASS_USER]
-        if not _user_allowed(user, entry.runtime_data.allowed_user_id):
-            # Same answer for every reason; the log names no token.
-            _LOGGER.warning("Rejected MCP request of a user who is not allowed for entry %s", entry.entry_id)
-            return _plain(HTTPStatus.FORBIDDEN, "User not allowed")
+        entry = await _admitted_entry(request, entry_id)
+        if isinstance(entry, web.Response):
+            return entry
         if (rejection := _check_transport(request)) is not None:
             return rejection
 
@@ -76,6 +69,24 @@ class McpView(HomeAssistantView):
                 return self.json(outcome.body, HTTPStatus.BAD_REQUEST)
             case MessageKind.REQUEST:
                 return self.json(outcome.body)
+
+
+async def _admitted_entry(request: web.Request, entry_id: str) -> GmxMailMcpConfigEntry | web.Response:
+    """Authenticate (401), find the loaded entry (404) and check the allowed user (403)."""
+    hass = request.app[KEY_HASS]
+    auth = authenticate(hass, request)
+    if auth.outcome is not AuthOutcome.OK or auth.user is None:
+        return await async_unauthorized(hass, request, auth)
+
+    entry: GmxMailMcpConfigEntry | None = hass.config_entries.async_get_entry(entry_id)
+    # runtime_data survives an unload, so the state decides whether the endpoint is live.
+    if entry is None or entry.domain != DOMAIN or entry.state is not ConfigEntryState.LOADED:
+        return _plain(HTTPStatus.NOT_FOUND, "Unknown endpoint")
+    if not _user_allowed(auth.user, entry.runtime_data.allowed_user_id):
+        # Same answer for every reason; the log names no token.
+        _LOGGER.warning("Rejected MCP request of a user who is not allowed for entry %s", entry.entry_id)
+        return _plain(HTTPStatus.FORBIDDEN, "User not allowed")
+    return entry
 
 
 def _check_transport(request: web.Request) -> web.Response | None:
