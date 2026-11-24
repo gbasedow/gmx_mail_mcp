@@ -23,7 +23,8 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
   Entscheidung D1: Code wird **kopiert**, dieses Repo ist eigenständig (kein gemeinsames Paket).
 - **Übernommen (HA-frei, 313 Tests grün unter Python 3.14):** `client/` (IMAP-Worker, Reader, Writer, Deleter, Composer, SMTP, Sent,
   Policy, Sanitize, Structure, Folders, IDLE, Errors), `const.py`, `options.py`, `envelope.py`, `confirm.py`.
-- **Noch nicht vorhanden (zu bauen):** Config-Flow (mehrere Konten, Tool-Schalter im Flow), MCP-Endpunkt, Tool-Registry, Token-/Benutzerprüfung,
+- **M0 (Spike) vorhanden:** MCP-Endpunkt (eigene JSON-RPC-Schicht, D20) mit HA-Token und Benutzerprüfung (D9), Config-Flow nur mit Benutzerwahl, Spike-Tool; Bericht `docs/M0-SPIKE.md`.
+- **Noch nicht vorhanden (zu bauen):** Config-Flow mit Kontodaten (mehrere Konten, Tool-Schalter im Flow), Tool-Registry,
   Anhang-Auslieferung (Text und Datei), Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.
@@ -51,16 +52,18 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - Nie `CLOSE` nach Read-Write-`SELECT`, sondern `UNSELECT`; nie mailbox-weites `EXPUNGE`, nur `UID EXPUNGE` (UIDPLUS); Lesen nur mit `BODY.PEEK`.
 - Mail-Referenz `{folder, uid, uidvalidity}`; bei geänderter `uidvalidity` ablehnen.
 - Antworten mit Budget, Paginierung, `truncated`, `content_trust: "untrusted_external_email"`, Rahmen mit Zufallskennung (Vorlage: `envelope.py`, `client/sanitize.py`).
+- **Schemas mit `probatio`, nicht `voluptuous`:** HA 2026.11 verlangt `probatio` (Formular-API ist darauf typisiert); `voluptuous` ist dort nur noch indirekt installiert (D21).
+- **Test-Plugin blockiert Sockets:** `pytest-homeassistant-custom-component` lädt sich automatisch; Probe- und Servertests deshalb mit `-p no:homeassistant`.
 - **Zusammenspiel mit `gmx_mail`:** Nicht beide Integrationen gleichzeitig gegen dasselbe Konto betreiben (doppelte IDLE-Verbindungen, GMX-Verbindungslimit).
 
 ## 5. Befehle
 
 ```
 uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements_dev.txt
-.venv/bin/python -m pytest -q tests/client                    # HA-freie Client-Schicht (313 Tests)
-.venv/bin/python -m pytest -q -p no:cacheprovider tests/probe # Probe-Skript gegen Fake-IMAP (dauert ≈ 70 s)
+.venv/bin/python -m pytest -q tests/client tests/mcp tests/ha  # Client-Schicht, MCP-Protokoll, HA (Endpunkt, Flow)
+.venv/bin/python -m pytest -q -p no:cacheprovider -p no:homeassistant tests/probe  # Probe-Skript gegen Fake-IMAP (≈ 70 s)
 python3 tools/make_test_certs.py && docker compose up -d greenmail dovecot
-.venv/bin/python -m pytest -q -m integration tests/integration  # Servertests (GreenMail, GMX-naher Dovecot)
+.venv/bin/python -m pytest -q -p no:homeassistant -m integration tests/integration  # Servertests (GreenMail, GMX-naher Dovecot)
 .venv/bin/ruff check . && .venv/bin/ruff format --check . && .venv/bin/mypy custom_components/gmx_mail_mcp
 GMX_USER=... GMX_PASS=... python3 tools/gmx_probe.py          # nur manuell, Testkonto
 ```

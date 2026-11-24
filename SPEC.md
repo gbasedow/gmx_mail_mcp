@@ -103,7 +103,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 
 | M | Inhalt |
 |---|---|
-| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Prüft D8 (Bearer-Weg); Nr. 7 ist mit D20 entschieden. |
+| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Prüft D8 (Bearer-Weg); Nr. 7 ist mit D20 entschieden. **Stand 24.11.2026:** Claude Code ✔ (lokal, HA 2026.11.3), claude.ai offen – siehe `docs/M0-SPIKE.md`. |
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). |
