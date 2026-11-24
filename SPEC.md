@@ -53,7 +53,7 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `save_draft` | O | Entwurf per APPEND, Text und Anhänge (D35) – **M3** |
 | `trash` | D | In den Papierkorb, ohne Code (D38) – **M4** |
 | `delete_permanently`, `delete_folder` | D | endgültig nur mit Option; Ordner nur leer (D40); Vorschau + Bestätigungscode, je Tool abschaltbar (D45) – **M4** |
-| `send_message`, `reply`, `forward`, `send_draft` | S | Versand-Modus `off`/`allowlist`/`any`, Vorschau + Code |
+| `send_message`, `reply`, `forward`, `send_draft` | S | Versandmodus „nur Allowlist“/„beliebige Adressen“ (D46), Limits (D48), Vorschau + Code, je Tool abschaltbar (D45), Gesendet-Kopie (D49) – **M5** |
 
 Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
 `get_capabilities`, Keywords auflisten. Nicht aufgenommen: mailbox-weites `EXPUNGE`. `.eml` hochladen ist zurückgestellt (D34).
@@ -65,8 +65,11 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
    Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
-3. **Versand:** Allowlist/Modus, Empfänger- und Stundenlimit, Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
-   Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist die Allowlist.
+3. **Versand (M5, D46–D56):** Modus „nur Allowlist“ (genaue Adressen oder `*@domain`; leere Liste = nichts geht raus; Voreinstellung) oder
+   „beliebige Adressen“; Option „Antworten an den Absender“ (nur From, Standard aus, D47); Empfänger je Mail, Mails pro Tag und Empfänger
+   pro Stunde (Tag/Stunde mit 0 abschaltbar, D48), Gesamtgröße (D54); Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
+   Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist der Versandmodus mit der Allowlist.
+   Eine Mail geht höchstens einmal raus, auch bei unbekanntem Ausgang oder Zeitüberschreitung (D58).
    Der Nutzer kann den Code **je Tool** im Optionsdialog abschalten (`tools_without_confirmation`, D45; Voreinstellung: überall an). Mit direktem MCP-Zugriff gibt es keine
    ha-mcp-Freigabe mehr – die Rückfrage übernimmt der Client (Claude fragt bei Connectoren standardmäßig vor Tool-Aufrufen).
 4. **Löschen:** Papierkorb zuerst; endgültig nur mit Option, nur Papierkorb/Spam, `UID EXPUNGE` genau dieser UIDs; höchstens 50 Mails je Aufruf.
@@ -93,7 +96,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 ## 6. Konfiguration
 
 - Config-Flow: E-Mail, App-Passwort, Hosts/Ports (Voreinstellung GMX), Prüfung von IMAP- und SMTP-Login. Reauth, Reconfigure, Options-Flow.
-- Optionen: `enabled_tools`, Versand-Modus, Allowlist, Limits (aus `const.py`/`options.py` der Vorlage), Größenlimit Anhänge, Ordner-Overrides, Audit-Aufbewahrung.
+- Optionen: `enabled_tools`, Versandmodus, Allowlist, Antworten an den Absender, Absendername, Gesendet-Kopie, Limits (aus `const.py`/`options.py` der Vorlage, M5), Größenlimits, Löschen (M4), Ordner-Overrides, Audit-Aufbewahrung.
 - Verbindungs-URL (extern/Nabu Casa, sonst intern; wie ha-mcp auf dem Konfigurieren-Bildschirm) und eine Kopiervorlage für Claude Code werden im Options-Flow angezeigt (kein Token), D22.
 
 ## 7. Tests
@@ -113,7 +116,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test bestanden – siehe `docs/M3.md`. |
 | M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test offen – siehe `docs/M4.md`. |
-| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. |
+| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test offen – siehe `docs/M5.md`. |
 | M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
 
 Je Meilenstein: Tests grün, Bericht, Freigabe des Nutzers.
