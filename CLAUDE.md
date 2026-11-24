@@ -56,6 +56,7 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - Antworten mit Budget, Paginierung, `truncated`, `content_trust: "untrusted_external_email"`, Rahmen mit Zufallskennung (Vorlage: `envelope.py`, `client/sanitize.py`).
 - **Schemas mit `probatio`, nicht `voluptuous`:** HA 2026.11 verlangt `probatio` (Formular-API ist darauf typisiert); `voluptuous` ist dort nur noch indirekt installiert (D21).
 - **Test-Plugin blockiert Sockets:** `pytest-homeassistant-custom-component` lädt sich automatisch; Probe- und Servertests deshalb mit `-p no:homeassistant`.
+- **Anmeldung am Endpunkt (D25):** kein `requires_auth`; `auth.py` prüft das Token mit HA-Funktionen und zählt nur echte Fehlversuche für die IP-Sperre (Nutzerinstanz: `login_attempts_threshold: 5`). Nicht auf `requires_auth` zurückbauen.
 - **Zusammenspiel mit `gmx_mail`:** Nicht beide Integrationen gleichzeitig gegen dasselbe Konto betreiben (doppelte IDLE-Verbindungen, GMX-Verbindungslimit).
 
 ## 5. Befehle

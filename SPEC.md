@@ -25,7 +25,7 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
  client/*          IMAP/SMTP-Schicht (übernommen, HA-frei)
 ```
 
-- **Token:** Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
+- **Token (geändert durch D25):** Der Endpunkt prüft das Bearer-Token selbst mit HAs eigener Prüfung; nur echte Fehlversuche zählen für die IP-Sperre (siehe `auth.py`). Ursprünglicher Entwurf: Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
   (Long-Lived Access Tokens eingeschlossen) und lehnt ungültige Aufrufe mit 401 ab, bevor Integrationscode läuft. Zusätzlich prüft `guard.py` den Benutzer
   (nur der im Config-Flow gewählte Benutzer, D9). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
 - **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Eigene schlanke JSON-RPC-Schicht,
