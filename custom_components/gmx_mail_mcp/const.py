@@ -30,6 +30,13 @@ TOOL_CALL_TIMEOUT_S: Final = 120.0
 CONF_MAX_ATTACHMENT_MB: Final = "max_attachment_mb"
 DEFAULT_MAX_ATTACHMENT_MB: Final = 10
 MAX_ATTACHMENT_MB: Final = 10
+# Files the model hands over in a tool call (D17): per file and for all files of one call. 20 MB of files are about
+# 27.4 MB as base64 in the stored message, just below GMX's APPENDLIMIT of 28 MiB (GMX-NOTES row 11).
+CONF_MAX_UPLOAD_MB: Final = "max_upload_mb"
+DEFAULT_MAX_UPLOAD_MB: Final = 10
+MAX_UPLOAD_MB: Final = 20
+# Tool names the options were last saved with (D31): tools added by a later version are "new" until the next save.
+CONF_KNOWN_TOOLS: Final = "known_tools"
 
 
 class Security(StrEnum):
@@ -220,6 +227,7 @@ class PushState(StrEnum):
 # --------------------------------------------------------------------------- repairs
 
 ISSUE_IMAP_POSSIBLY_DISABLED: Final = "imap_possibly_disabled"
+ISSUE_NEW_TOOLS: Final = "new_tools_available"
 ISSUE_UIDVALIDITY_CHANGED: Final = "uidvalidity_changed"
 ISSUE_FOLDER_MAPPING_AMBIGUOUS: Final = "folder_mapping_ambiguous"
 ISSUE_SERVER_RULES_UNAVAILABLE: Final = "server_rules_unavailable"

@@ -24,8 +24,10 @@ from .const import (
     CONF_SMTP_SECURITY,
     DOMAIN,
     ISSUE_IMAP_POSSIBLY_DISABLED,
+    ISSUE_NEW_TOOLS,
     Security,
 )
+from .mcp.registry import new_tool_names
 
 
 def imap_settings_from_data(data: Mapping[str, Any]) -> ImapSettings:
@@ -80,3 +82,27 @@ def async_create_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
 def async_delete_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove the issue after a successful login."""
     ir.async_delete_issue(hass, DOMAIN, auth_issue_id(entry))
+
+
+def new_tools_issue_id(entry: ConfigEntry) -> str:
+    """Return the repair issue id for tools added by an update (D31)."""
+    return f"{ISSUE_NEW_TOOLS}_{entry.entry_id}"
+
+
+@callback
+def async_update_new_tools_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Show which tools an update added (they stay off, D23) until the options are saved again."""
+    names = new_tool_names(entry.options)
+    if not names:
+        ir.async_delete_issue(hass, DOMAIN, new_tools_issue_id(entry))
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        new_tools_issue_id(entry),
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_NEW_TOOLS,
+        translation_placeholders={"account": entry.title, "tools": ", ".join(names)},
+    )

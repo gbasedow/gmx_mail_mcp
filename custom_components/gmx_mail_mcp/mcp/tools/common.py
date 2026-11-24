@@ -22,16 +22,23 @@ from ...client.errors import (
     GmxBackoffError,
     GmxConnectionError,
     GmxConnectionLimitError,
+    GmxFolderExistsError,
     GmxFolderNotFoundError,
+    GmxInvalidFolderNameError,
     GmxMailError,
     GmxMessageNotFoundError,
+    GmxMessageTooLargeError,
     GmxPartNotFoundError,
+    GmxProtectedFolderError,
+    GmxProtectedTargetError,
     GmxSearchRejectedError,
     GmxTlsError,
     GmxUidValidityError,
     GmxUnsupportedError,
+    GmxWrongFolderError,
 )
 from ...client.reader import MailRef
+from ...const import MAX_REFS_PER_CALL
 from ...envelope import build_envelope
 from ..protocol import ToolResult
 
@@ -48,6 +55,15 @@ REF_SCHEMA: Final[dict[str, Any]] = {
     },
     "required": ["folder", "uid", "uidvalidity"],
     "additionalProperties": False,
+}
+
+
+REFS_SCHEMA: Final[dict[str, Any]] = {
+    "type": "array",
+    "minItems": 1,
+    "maxItems": MAX_REFS_PER_CALL,
+    "items": REF_SCHEMA,
+    "description": f"Message references exactly as returned by gmx_search (1 to {MAX_REFS_PER_CALL}).",
 }
 
 
@@ -146,6 +162,20 @@ def get_ref(args: Mapping[str, Any], key: str = "ref") -> MailRef:
     return MailRef(folder=folder, uid=uid, uidvalidity=uidvalidity)
 
 
+def get_refs(args: Mapping[str, Any], key: str = "refs") -> list[MailRef]:
+    """1 to ``MAX_REFS_PER_CALL`` distinct mail references."""
+    value = args.get(key)
+    if not isinstance(value, list) or not 1 <= len(value) <= MAX_REFS_PER_CALL:
+        raise ToolInputError(f"{key} must be a list of 1 to {MAX_REFS_PER_CALL} references (as returned by gmx_search)")
+    refs: list[MailRef] = []
+    for index, item in enumerate(value):
+        ref = get_ref({"ref": item}, "ref")
+        if ref in refs:
+            raise ToolInputError(f"{key}[{index}] is listed twice")
+        refs.append(ref)
+    return refs
+
+
 # --------------------------------------------------------------------------- errors
 
 # Client error -> (code, message). Order matters for subclasses (GmxBackoffError before GmxConnectionError).
@@ -162,7 +192,23 @@ _ERRORS: tuple[tuple[type[Exception], str, str], ...] = (
     (GmxAttachmentTooLargeError, "too_large", "Larger than the limit set in the integration options."),
     (GmxSearchRejectedError, "search_rejected", "The server rejected the search; simplify the criteria."),
     (GmxUnsupportedError, "unsupported", "The mail server does not support this."),
+    (
+        GmxProtectedTargetError,
+        "protected_target",
+        "Moving or copying into the trash is not allowed here; deleting is done with the separate trash tool.",
+    ),
+    (GmxProtectedFolderError, "protected_folder", "INBOX and special folders cannot be renamed or get subfolders."),
+    (GmxFolderExistsError, "folder_exists", "A folder with this name already exists."),
+    (
+        GmxInvalidFolderNameError,
+        "invalid_folder_name",
+        "Folder name not allowed (empty, too long, / % * or control characters), or source and target are the same (see reason).",
+    ),
+    (GmxWrongFolderError, "wrong_folder", "The messages are not in the folder this tool works on."),
+    (GmxMessageTooLargeError, "message_too_large", "The message is larger than the mail server accepts."),
 )
+# Errors whose ``reason`` is more precise than the code above (e.g. same_folder, not_in_junk, keywords_not_supported).
+_REASON_ERRORS: Final = (GmxInvalidFolderNameError, GmxWrongFolderError, GmxUnsupportedError)
 
 
 def error_result(code: str, message: str, **details: Any) -> ToolResult:
@@ -174,7 +220,8 @@ def map_client_error(err: Exception) -> ToolResult:
     """Translate a client-layer or imapclient error."""
     for kind, code, message in _ERRORS:
         if isinstance(err, kind):
-            return error_result(code, message)
+            reason = getattr(err, "reason", None) if isinstance(err, _REASON_ERRORS) else None
+            return error_result(code, message, reason=reason) if isinstance(reason, str) else error_result(code, message)
     if isinstance(err, GmxMailError | IMAPClientError):
         return error_result("imap_error", "The mail server returned an error for this request.")
     raise err

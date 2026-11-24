@@ -99,7 +99,23 @@ def assert_read_only(imap: FakeImapServer) -> None:
     """EXAMINE only, BODY.PEEK only (the fake asserts PEEK), never CLOSE, never a write."""
     selects = [cmd for cmd in imap.commands if cmd[0] == "select"]
     assert selects and all(cmd[2] is True for cmd in selects)
-    assert not any(cmd[0] in ("close", "store", "move", "copy", "expunge", "append") for cmd in imap.commands)
+    assert not any(
+        cmd[0]
+        in (
+            "add_flags",
+            "remove_flags",
+            "move",
+            "copy",
+            "uid_expunge",
+            "append",
+            "create",
+            "rename",
+            "delete_folder",
+            "subscribe",
+            "unsubscribe",
+        )
+        for cmd in imap.commands
+    )
 
 
 # --------------------------------------------------------------------------- envelope, validation

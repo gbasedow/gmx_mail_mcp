@@ -80,15 +80,17 @@
     "step": {
       "init": {
         "title": "MCP-Zugriff und Tools",
-        "description": "**Verbindungs-URL:** `{url}`\n\n**claude.ai:** Benutzerdefinierten Connector mit dieser URL anlegen und mit dem erlaubten Home-Assistant-Benutzer anmelden.\n\n**Claude Code:** Als erlaubter Benutzer ein langlebiges Zugriffstoken erstellen (Profil > Sicherheit), dann ausführen:\n\n`{claude_code}`\n\nNur die unten eingeschalteten Tools sind sichtbar und aufrufbar. Voreinstellung: nur lesende Tools.",
+        "description": "**Verbindungs-URL:** `{url}`\n\n**claude.ai:** Benutzerdefinierten Connector mit dieser URL anlegen und mit dem erlaubten Home-Assistant-Benutzer anmelden.\n\n**Claude Code:** Als erlaubter Benutzer ein langlebiges Zugriffstoken erstellen (Profil > Sicherheit), dann ausführen:\n\n`{claude_code}`\n\nNur die unten eingeschalteten Tools sind sichtbar und aufrufbar. Voreinstellung: nur lesende Tools.\n\n**Neu seit dem letzten Speichern (noch ausgeschaltet):** {new_tools}",
         "data": {
           "enabled_tools": "Eingeschaltete Tools",
           "max_attachment_mb": "Größenlimit für Anhänge und .eml",
+          "max_upload_mb": "Größenlimit für Dateien beim Hochladen",
           "allow_html_output": "HTML-Ausgabe erlauben"
         },
         "data_description": {
           "enabled_tools": "Änderungen wirken sofort, ohne Neustart.",
           "max_attachment_mb": "Größte Datei, die gmx_get_attachment und gmx_get_raw_message liefern (1–10 MB). claude.ai nimmt je Antwort nur etwa 110 KB an, Claude Code bis zum Limit.",
+          "max_upload_mb": "Größte Datei (und Summe aller Dateien) je Aufruf, die gmx_save_draft annimmt (1–20 MB). Das Modell muss die Datei als base64 ausgeben; große Dateien machen den Aufruf langsam.",
           "allow_html_output": "Erlaubt gmx_get_message, bereinigtes HTML zu liefern (format html). Aus: nur Text."
         }
       }
@@ -110,7 +112,16 @@
         "gmx_get_attachment": "Lesen: Anhang als Text oder Datei abrufen (gmx_get_attachment)",
         "gmx_get_raw_message": "Lesen: Mail als .eml herunterladen (gmx_get_raw_message)",
         "gmx_get_thread": "Lesen: Gesprächsverlauf anzeigen (gmx_get_thread)",
-        "gmx_list_keywords": "Lesen: Schlagwörter auflisten (gmx_list_keywords)"
+        "gmx_list_keywords": "Lesen: Schlagwörter auflisten (gmx_list_keywords)",
+        "gmx_set_flags": "Organisieren: Markierungen und Schlagwörter setzen (gmx_set_flags)",
+        "gmx_move": "Organisieren: Mails verschieben, nicht in den Papierkorb (gmx_move)",
+        "gmx_copy": "Organisieren: Mails kopieren, nicht in den Papierkorb (gmx_copy)",
+        "gmx_mark_spam": "Organisieren: als Spam markieren – GMX löscht Spam nach 30 Tagen (gmx_mark_spam)",
+        "gmx_mark_not_spam": "Organisieren: aus dem Spam zurückholen (gmx_mark_not_spam)",
+        "gmx_create_folder": "Organisieren: Ordner anlegen (gmx_create_folder)",
+        "gmx_rename_folder": "Organisieren: Ordner umbenennen (gmx_rename_folder)",
+        "gmx_subscribe_folder": "Organisieren: Ordner abonnieren/abbestellen (gmx_subscribe_folder)",
+        "gmx_save_draft": "Organisieren: Entwurf speichern, mit Anhängen; sendet nicht (gmx_save_draft)"
       }
     }
   },
@@ -129,6 +140,10 @@
     "imap_possibly_disabled": {
       "title": "GMX-Anmeldung für {account} abgelehnt",
       "description": "GMX hat die Anmeldung abgelehnt. GMX schaltet den IMAP-Zugriff nach längerer Nichtnutzung ab und meldet dann ein falsches Passwort. Schalte „POP3- und IMAP-Zugriff erlauben“ in den GMX-Einstellungen wieder ein und authentifiziere die Integration neu (neues App-Passwort, falls es widerrufen wurde)."
+    },
+    "new_tools_available": {
+      "title": "Neue Tools für {account} verfügbar",
+      "description": "Ein Update hat Tools hinzugefügt, die ausgeschaltet bleiben, bis du sie einschaltest: {tools}. Öffne Einstellungen > Geräte & Dienste > GMX Mail MCP > Konfigurieren, wähle die gewünschten Tools und speichere. Danach verschwindet dieser Hinweis, auch wenn du nichts einschaltest."
     }
   }
 }
