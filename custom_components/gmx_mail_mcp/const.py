@@ -19,6 +19,12 @@ CONF_SMTP_PORT: Final = "smtp_port"
 CONF_SMTP_SECURITY: Final = "smtp_security"
 
 SECTION_SERVER: Final = "server"
+# HA user whose access tokens the MCP endpoint admits (D9); every other user gets 403.
+CONF_ALLOWED_USER: Final = "allowed_user"
+# Names of the MCP tools that are switched on (D12). Missing in the options = default: every tool of level READ.
+CONF_ENABLED_TOOLS: Final = "enabled_tools"
+# Seconds a single tool call may take before the client gets an error (the IMAP command itself is not cancelled).
+TOOL_CALL_TIMEOUT_S: Final = 120.0
 
 
 class Security(StrEnum):

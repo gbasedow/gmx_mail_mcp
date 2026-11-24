@@ -1,0 +1,123 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "GMX-Konto und MCP-Zugriff",
+        "description": "Gib die GMX-Adresse und ein App-Passwort ein (GMX: Account > Login & Sicherheit > App-Passwörter). Der IMAP/POP3-Zugriff muss in GMX eingeschaltet sein. Nur Zugriffstoken des gewählten Home-Assistant-Benutzers können den MCP-Endpunkt nutzen; lege dafür einen eigenen Benutzer an.",
+        "data": {
+          "email": "E-Mail-Adresse",
+          "password": "App-Passwort",
+          "allowed_user": "Erlaubter Benutzer"
+        },
+        "data_description": {
+          "email": "Vollständige Adresse, zugleich der Anmeldename.",
+          "password": "Wird in Home Assistant gespeichert und nicht wieder angezeigt.",
+          "allowed_user": "Anfragen mit Token oder Anmeldung eines anderen Benutzers werden abgelehnt (403)."
+        },
+        "sections": {
+          "server": {
+            "name": "Server",
+            "description": "GMX-Voreinstellungen; nur für einen anderen Anbieter ändern.",
+            "data": {
+              "imap_host": "IMAP-Server",
+              "imap_port": "IMAP-Port",
+              "imap_security": "IMAP-Verschlüsselung",
+              "smtp_host": "SMTP-Server",
+              "smtp_port": "SMTP-Port",
+              "smtp_security": "SMTP-Verschlüsselung"
+            }
+          }
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut bei GMX anmelden",
+        "description": "GMX hat die Anmeldung für {account} abgelehnt. Entweder wurde das App-Passwort widerrufen, oder GMX hat den IMAP-Zugriff nach längerer Nichtnutzung abgeschaltet. Prüfe die IMAP-Einstellung bei GMX und gib ein App-Passwort ein.",
+        "data": {
+          "password": "App-Passwort"
+        }
+      },
+      "reconfigure": {
+        "title": "{account} ändern",
+        "description": "Erlaubter Benutzer und Servereinstellungen. Adresse und Passwort bleiben unverändert.",
+        "data": {
+          "allowed_user": "Erlaubter Benutzer"
+        },
+        "data_description": {
+          "allowed_user": "Anfragen mit Token oder Anmeldung eines anderen Benutzers werden abgelehnt (403)."
+        },
+        "sections": {
+          "server": {
+            "name": "Server",
+            "data": {
+              "imap_host": "IMAP-Server",
+              "imap_port": "IMAP-Port",
+              "imap_security": "IMAP-Verschlüsselung",
+              "smtp_host": "SMTP-Server",
+              "smtp_port": "SMTP-Port",
+              "smtp_security": "SMTP-Verschlüsselung"
+            }
+          }
+        }
+      }
+    },
+    "error": {
+      "invalid_email": "Ungültige E-Mail-Adresse.",
+      "invalid_user": "Wähle einen aktiven Benutzer.",
+      "invalid_auth_or_imap_disabled": "Anmeldung abgelehnt: falsches App-Passwort, oder der IMAP-Zugriff ist bei GMX abgeschaltet.",
+      "smtp_auth_failed": "Die SMTP-Anmeldung wurde abgelehnt (IMAP funktionierte).",
+      "tls_error": "Sichere Verbindung fehlgeschlagen (TLS oder Zertifikat).",
+      "cannot_connect": "Der Server ist nicht erreichbar.",
+      "unknown": "Unerwarteter Fehler, siehe Protokoll."
+    },
+    "abort": {
+      "no_users": "Es gibt keinen aktiven Home-Assistant-Benutzer zur Auswahl.",
+      "already_configured": "Dieses Konto ist bereits eingerichtet.",
+      "reauth_successful": "Die Anmeldung funktioniert wieder.",
+      "reconfigure_successful": "Einstellungen geändert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MCP-Zugriff und Tools",
+        "description": "**Verbindungs-URL:** `{url}`\n\n**claude.ai:** Benutzerdefinierten Connector mit dieser URL anlegen und mit dem erlaubten Home-Assistant-Benutzer anmelden.\n\n**Claude Code:** Als erlaubter Benutzer ein langlebiges Zugriffstoken erstellen (Profil > Sicherheit), dann ausführen:\n\n`{claude_code}`\n\nNur die unten eingeschalteten Tools sind sichtbar und aufrufbar. Voreinstellung: nur lesende Tools.",
+        "data": {
+          "enabled_tools": "Eingeschaltete Tools"
+        },
+        "data_description": {
+          "enabled_tools": "Änderungen wirken sofort, ohne Neustart."
+        }
+      }
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "TLS (implizit)",
+        "starttls": "STARTTLS"
+      }
+    },
+    "enabled_tools": {
+      "options": {
+        "gmx_get_status": "Lesen: Status der Verbindung (gmx_get_status)"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth_or_imap_disabled": {
+      "message": "GMX hat die Anmeldung abgelehnt: falsches App-Passwort, oder der IMAP-Zugriff ist abgeschaltet."
+    },
+    "tls_error": {
+      "message": "Sichere Verbindung zum Mailserver fehlgeschlagen."
+    },
+    "cannot_connect": {
+      "message": "Der Mailserver ist nicht erreichbar."
+    }
+  },
+  "issues": {
+    "imap_possibly_disabled": {
+      "title": "GMX-Anmeldung für {account} abgelehnt",
+      "description": "GMX hat die Anmeldung abgelehnt. GMX schaltet den IMAP-Zugriff nach längerer Nichtnutzung ab und meldet dann ein falsches Passwort. Schalte „POP3- und IMAP-Zugriff erlauben“ in den GMX-Einstellungen wieder ein und authentifiziere die Integration neu (neues App-Passwort, falls es widerrufen wurde)."
+    }
+  }
+}

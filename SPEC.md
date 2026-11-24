@@ -28,9 +28,10 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
 - **Token:** Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
   (Long-Lived Access Tokens eingeschlossen) und lehnt ungültige Aufrufe mit 401 ab, bevor Integrationscode läuft. Zusätzlich prüft `guard.py` den Benutzer
   (nur der im Config-Flow gewählte Benutzer, D9). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
-- **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Ob das offizielle `mcp`-Python-SDK
-  oder eine schlanke eigene JSON-RPC-Schicht verwendet wird, ist **[offen 7]** (Abhängigkeitskonflikte mit HA vermeiden).
-- **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
+- **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Eigene schlanke JSON-RPC-Schicht,
+  kein `mcp`-Python-SDK (D20).
+- **Anmeldung (D22):** Claude Code u. a. mit Long-Lived Token als Bearer; claude.ai per OAuth mit HA als Anmeldestelle (HA-Login des MCP-Benutzers). HA liefert dafür die 401-Challenge und die `.well-known`-Dokumente selbst; eigener OAuth-Code entfällt.
+- **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Frühere Annahme (überholt durch D22):** Der Connector in claude.ai erwartet nach bisherigem
   Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Der Nutzer betreibt ha-mcp auf diese Weise (D8); trotzdem vor allem anderen per Spike prüfen (M0).
 - **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto; ohne Sensoren keine dauerhafte IDLE-Verbindung (D15).
 
@@ -59,7 +60,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 ## 4. Sicherheit
 
 1. **Token:** nur gültige HA-Tokens, 401 sonst. Nur der gewählte HA-Benutzer (D9); Tokens anderer Benutzer werden mit 403 abgelehnt.
-2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus.
+2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus. Gespeicherte Auswahl ist explizit; neue Tools aus Updates bleiben aus (D23).
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
    Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
@@ -79,7 +80,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
   eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
 - Größenlimit je Abruf als Option (Voreinstellung 10 MB, D14; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
   Teilabruf per Offset/Länge als spätere Erweiterung.
-- Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python, Auswahl **[offen 9]**.
+- Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python; Auswahl der Bibliotheken in M2 (D10 nennt sie als offen).
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.
 - Senden mit Anhang (D17): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (konfigurierbar, Standard 10 MB),
@@ -89,7 +90,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 
 - Config-Flow: E-Mail, App-Passwort, Hosts/Ports (Voreinstellung GMX), Prüfung von IMAP- und SMTP-Login. Reauth, Reconfigure, Options-Flow.
 - Optionen: `enabled_tools`, Versand-Modus, Allowlist, Limits (aus `const.py`/`options.py` der Vorlage), Größenlimit Anhänge, Ordner-Overrides, Audit-Aufbewahrung.
-- Endpunkt-URL und eine Kopiervorlage für die Client-Konfiguration werden im Options-Flow angezeigt (kein Token).
+- Verbindungs-URL (extern/Nabu Casa, sonst intern; wie ha-mcp auf dem Konfigurieren-Bildschirm) und eine Kopiervorlage für Claude Code werden im Options-Flow angezeigt (kein Token), D22.
 
 ## 7. Tests
 
@@ -103,7 +104,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 
 | M | Inhalt |
 |---|---|
-| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Entscheidet **[offen 4]** und **[offen 7]**. |
+| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Prüft D8 (Bearer-Weg); Nr. 7 ist mit D20 entschieden. **Stand 24.11.2026:** Claude Code ✔ (lokal, HA 2026.11.3), claude.ai offen – siehe `docs/M0-SPIKE.md`. |
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). |
