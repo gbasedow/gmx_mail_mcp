@@ -68,8 +68,8 @@ from ...const import (
     SendMode,
     SentCopyMode,
 )
-from ..protocol import REQUEST_USER, Tool, ToolResult
-from ..registry import ToolContext, ToolSpec, skips_confirmation
+from ..protocol import Tool, ToolResult
+from ..registry import ToolContext, ToolSpec, run_to_end, skips_confirmation
 from .common import (
     REF_SCHEMA,
     ToolInputError,
@@ -274,7 +274,7 @@ def _preview(outgoing: Outgoing, options: Mapping[str, Any]) -> dict[str, Any]:
     return preview
 
 
-async def _send_flow(context: ToolContext, request: _Request, token: str | None) -> ToolResult:
+async def _send_flow(context: ToolContext, request: _Request, token: str | None, arguments: Mapping[str, Any]) -> ToolResult:
     """Compose, check, preview + code or send once; holds the account's send lock until the sending has ended."""
     options = context.options()
     policy = _policy(options)
@@ -315,12 +315,8 @@ async def _send_flow(context: ToolContext, request: _Request, token: str | None)
         )
         delivery.add_done_callback(lambda _task: lock.release())
         handed_over = True
-        try:
-            return await asyncio.shield(delivery)
-        except asyncio.CancelledError:
-            # Timeout or aborted request: SMTP may be running; it finishes, and its end is recorded separately (D58).
-            delivery.add_done_callback(_late_recorder(context, request, REQUEST_USER.get()))
-            raise
+        # Timeout or aborted request: SMTP may be running; it finishes, and its end is recorded separately (D58).
+        return await run_to_end(context.audit, tool=request.tool, level=Permission.SEND, arguments=arguments, task=delivery)
     finally:
         if not handed_over:
             lock.release()
@@ -464,36 +460,6 @@ async def _server_info(context: ToolContext) -> Any:
     return info
 
 
-def _late_recorder(context: ToolContext, request: _Request, user: str | None) -> Callable[[asyncio.Future[ToolResult]], None]:
-    """Audit entry for a sending that ended after its call was cancelled (D58); never content."""
-
-    def _record(task: asyncio.Future[ToolResult]) -> None:
-        try:
-            facts: dict[str, Any] = {}
-            if task.cancelled():
-                outcome = "late_cancelled"
-            elif task.exception() is not None:
-                outcome = "late_internal_error"
-            else:
-                facts = dict(task.result().audit or {})
-                outcome = f"late_{facts.get('outcome', 'ok')}"
-            context.audit.record(
-                tool=request.tool,
-                level=Permission.SEND.value,
-                outcome=outcome,
-                arguments=request.params,
-                count=facts.get("count"),
-                user=user,
-                error=facts.get("error"),
-                confirmation=facts.get("confirmation"),
-                recipient_domains=facts.get("recipient_domains") or (),
-            )
-        except Exception:
-            _LOGGER.exception("Audit entry for the late end of %s could not be written", request.tool)
-
-    return _record
-
-
 def _token(args: Mapping[str, Any]) -> str | None:
     return get_str(args, "confirm_token", max_len=MAX_TOKEN)
 
@@ -562,7 +528,7 @@ def _build_send_message(context: ToolContext) -> Tool:
             )
 
         request = _Request(SEND_MESSAGE, "send_message", params, compose, needs_imap=False, warnings=warnings)
-        return await _send_flow(context, request, token)
+        return await _send_flow(context, request, token, args)
 
     return Tool(
         name=SEND_MESSAGE,
@@ -628,7 +594,7 @@ def _build_reply(context: ToolContext) -> Tool:
             original = load_original(session, info, ref, with_attachments=False, max_bytes=limit)
             return reply_message(original, sender=sender, sender_name=name, body_text=body, reply_all=reply_all, quote=quote)
 
-        return await _send_flow(context, _Request(REPLY, "reply", params, compose, needs_imap=True), token)
+        return await _send_flow(context, _Request(REPLY, "reply", params, compose, needs_imap=True), token, args)
 
     return Tool(
         name=REPLY,
@@ -684,7 +650,7 @@ def _build_forward(context: ToolContext) -> Tool:
             original = load_original(session, info, ref, with_attachments=include, max_bytes=limit)
             return forward_message(original, sender=sender, sender_name=name, to=to_specs, cc=cc_specs, comment=comment)
 
-        return await _send_flow(context, _Request(FORWARD, "forward", params, compose, needs_imap=True), token)
+        return await _send_flow(context, _Request(FORWARD, "forward", params, compose, needs_imap=True), token, args)
 
     return Tool(
         name=FORWARD,
@@ -731,7 +697,8 @@ def _build_send_draft(context: ToolContext) -> Tool:
             assert session is not None
             return load_draft(session, info, ref, sender=sender, sender_name=name, max_bytes=limit)
 
-        return await _send_flow(context, _Request(SEND_DRAFT, "send_draft", {"ref": _ref_params(ref)}, compose, needs_imap=True), token)
+        request = _Request(SEND_DRAFT, "send_draft", {"ref": _ref_params(ref)}, compose, needs_imap=True)
+        return await _send_flow(context, request, token, args)
 
     return Tool(
         name=SEND_DRAFT,

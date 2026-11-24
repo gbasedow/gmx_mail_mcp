@@ -31,9 +31,13 @@ _SECONDS_PER_HOUR: Final = 3_600
 _NOT_FINGERPRINTED: Final = frozenset({"confirm_token"})
 
 
-def fingerprint(params: Any) -> str:
-    """16 hex characters of SHA-256 over the canonical JSON of ``params`` (lets entries be correlated, not read)."""
-    canonical = json.dumps(params, sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
+def fingerprint(tool: str, params: Any) -> str:
+    """16 hex characters of SHA-256 over the tool name and the canonical JSON of ``params``.
+
+    Lets entries of one call (preview, execution, late end) be correlated, not read. The tool name is part of it, so the
+    same references given to ``gmx_trash`` and ``gmx_delete_permanently`` do not share a fingerprint (D62).
+    """
+    canonical = json.dumps([tool, params], sort_keys=True, separators=(",", ":"), default=str, ensure_ascii=False)
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
@@ -116,7 +120,7 @@ class AuditLog:
             "count": count,
             "folders": names[:MAX_FOLDERS_PER_ENTRY],
             "user": user,
-            "hash": fingerprint({k: v for k, v in arguments.items() if k not in _NOT_FINGERPRINTED}),
+            "hash": fingerprint(tool, {k: v for k, v in arguments.items() if k not in _NOT_FINGERPRINTED}),
         }
         if error:
             entry["error"] = error

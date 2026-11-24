@@ -73,6 +73,55 @@ def skips_confirmation(options: Mapping[str, Any], name: str) -> bool:
     return name in CONFIRMABLE_TOOLS and isinstance(chosen, list) and name in chosen
 
 
+def _late_recorder(
+    audit: AuditLog, tool: str, level: str, arguments: Mapping[str, Any], user: str | None
+) -> Callable[[asyncio.Future[ToolResult]], None]:
+    """Audit entry for an action that ended after its call was cancelled (D58, D61); never content."""
+
+    def _record(task: asyncio.Future[ToolResult]) -> None:
+        try:
+            facts: dict[str, Any] = {}
+            if task.cancelled():
+                outcome = "late_cancelled"
+            elif task.exception() is not None:
+                outcome = "late_internal_error"
+            else:
+                facts = dict(task.result().audit or {})
+                outcome = f"late_{facts.get('outcome', 'ok')}"
+            audit.record(
+                tool=tool,
+                level=level,
+                outcome=outcome,
+                arguments=arguments,
+                count=facts.get("count"),
+                folders=facts.get("folders") or (),
+                user=user,
+                error=facts.get("error"),
+                confirmation=facts.get("confirmation"),
+                recipient_domains=facts.get("recipient_domains") or (),
+            )
+        except Exception:
+            _LOGGER.exception("Audit entry for the late end of %s could not be written", tool)
+
+    return _record
+
+
+async def run_to_end(
+    audit: AuditLog, *, tool: str, level: Permission, arguments: Mapping[str, Any], task: asyncio.Future[ToolResult]
+) -> ToolResult:
+    """Await ``task`` (an action that changes the mailbox) so that a timeout or abort of the call does not stop it.
+
+    Once an IMAP or SMTP command has begun it may complete on the server anyway; cutting it off would lose the counting
+    and leave the outcome open. The call is cancelled as usual (the audit wrapper records ``cancelled``); the action runs
+    to its end and records a second entry ``late_ok`` / ``late_error`` / ... (D58 for sending, D61 for deleting).
+    """
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        task.add_done_callback(_late_recorder(audit, tool, level.value, dict(arguments), REQUEST_USER.get()))
+        raise
+
+
 def _specs() -> tuple[ToolSpec, ...]:
     # Imported here: tool modules import this module's ToolContext/ToolSpec.
     from .tools import attachment, audit_log, delete, organize, read, send, status  # noqa: PLC0415
