@@ -1,11 +1,11 @@
-"""Bootstrap a FRESH, throw-away Home Assistant for the M0 end-to-end test of the MCP endpoint.
+"""Bootstrap a FRESH, throw-away Home Assistant for end-to-end tests of the MCP endpoint (M0, M1).
 
 Refuses to run unless the instance is not onboarded yet, so it cannot touch a real installation. It
 1. onboards an owner (random password, never printed),
 2. creates a dedicated non-admin user "MCP Client" with local credentials (D9),
 3. creates a long-lived access token for each of them (as the profile page does),
-4. sets up ``gmx_mail_mcp`` through the real config flow over REST, after HA has started,
-and writes the two tokens to ``<out>/owner.token`` and ``<out>/mcp.token`` (mode 600). Prints only ids and the endpoint path.
+and writes the two tokens to ``<out>/owner.token`` and ``<out>/mcp.token`` (mode 600). Prints only the id of the MCP user.
+The entry itself needs a mail login (config flow since M1) and is set up separately.
 
 Usage: python tools/spike_bootstrap.py http://127.0.0.1:18123 <out-dir>   (needs aiohttp, e.g. from the HA venv)
 """
@@ -99,22 +99,9 @@ async def main(base: str, out: Path) -> None:
             session, base, mcp_session, {"type": "auth/long_lived_access_token", "client_name": "spike mcp", "lifespan": 1}
         )
 
-        headers = {"Authorization": f"Bearer {owner_session}"}
-        async with session.post(f"{base}/api/config/config_entries/flow", json={"handler": "gmx_mail_mcp"}, headers=headers) as resp:
-            resp.raise_for_status()
-            form = await resp.json()
-        async with session.post(
-            f"{base}/api/config/config_entries/flow/{form['flow_id']}", json={"allowed_user": mcp_user_id}, headers=headers
-        ) as resp:
-            resp.raise_for_status()
-            created = await resp.json()
-        if created.get("type") != "create_entry":
-            raise RuntimeError(f"config flow did not create an entry: {created.get('type')}")
-
     _write_secret(out / "owner.token", owner_llat)
     _write_secret(out / "mcp.token", mcp_llat)
-    entry_id = created["result"]["entry_id"]
-    print(json.dumps({"mcp_user_id": mcp_user_id, "entry_id": entry_id, "endpoint": f"/api/gmx_mail_mcp/{entry_id}/mcp"}))
+    print(json.dumps({"mcp_user_id": mcp_user_id}))
 
 
 if __name__ == "__main__":

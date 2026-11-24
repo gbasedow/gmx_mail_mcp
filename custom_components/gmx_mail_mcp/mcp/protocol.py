@@ -12,11 +12,14 @@ Logging never includes parameters or arguments: they may carry mail content or a
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Final
+
+from ..const import TOOL_CALL_TIMEOUT_S, Permission
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,15 +73,14 @@ type ToolHandler = Callable[[dict[str, Any]], Awaitable[ToolResult]]
 
 @dataclass(frozen=True, slots=True)
 class Tool:
-    """One MCP tool. ``read_only`` maps to the ``readOnlyHint`` annotation."""
+    """One MCP tool. ``level`` (R/O/D/S) decides the default switch state and the MCP annotations."""
 
     name: str
     title: str
     description: str
     input_schema: dict[str, Any]
+    level: Permission
     handler: ToolHandler = field(repr=False, compare=False)
-    read_only: bool = True
-    destructive: bool = False
 
     def as_dict(self) -> dict[str, Any]:
         """Wire format for ``tools/list``."""
@@ -89,8 +91,8 @@ class Tool:
             "inputSchema": self.input_schema,
             "annotations": {
                 "title": self.title,
-                "readOnlyHint": self.read_only,
-                "destructiveHint": self.destructive,
+                "readOnlyHint": self.level is Permission.READ,
+                "destructiveHint": self.level is Permission.DELETE,
                 "openWorldHint": True,
             },
         }
@@ -107,11 +109,12 @@ class Outcome:
 class McpServer:
     """Dispatch of single JSON-RPC messages. Stateless: every message is handled on its own."""
 
-    def __init__(self, *, name: str, version: str, tools: Callable[[], Iterable[Tool]]) -> None:
+    def __init__(self, *, name: str, version: str, tools: Callable[[], Iterable[Tool]], call_timeout: float = TOOL_CALL_TIMEOUT_S) -> None:
         """``tools`` is called per message, so switching a tool off takes effect immediately."""
         self._name = name
         self._version = version
         self._tools = tools
+        self._call_timeout = call_timeout
 
     async def handle_message(self, message: Any) -> Outcome:
         """Handle one decoded JSON value."""
@@ -156,7 +159,11 @@ class McpServer:
         if tool is None:
             return _error(request_id, INVALID_PARAMS, "Unknown tool")
         try:
-            result = await tool.handler(arguments)
+            async with asyncio.timeout(self._call_timeout):
+                result = await tool.handler(arguments)
+        except TimeoutError:
+            _LOGGER.warning("Tool %s timed out after %.0f s", tool.name, self._call_timeout)
+            result = ToolResult.text("Tool call timed out", is_error=True)
         except Exception:
             # No details to the client: they may contain server internals. The log has the traceback.
             _LOGGER.exception("Tool %s failed", tool.name)

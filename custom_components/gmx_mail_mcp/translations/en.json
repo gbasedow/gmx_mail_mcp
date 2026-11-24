@@ -2,18 +2,122 @@
   "config": {
     "step": {
       "user": {
-        "title": "MCP endpoint",
-        "description": "Only access tokens of the chosen Home Assistant user can use the endpoint. Create a dedicated user for this and generate the long-lived access token under that user.",
+        "title": "GMX account and MCP access",
+        "description": "Enter the GMX address and an app password (GMX: Account > Login & Security > App passwords). IMAP/POP3 access must be enabled in GMX. Only access tokens of the chosen Home Assistant user can use the MCP endpoint; create a dedicated user for it.",
+        "data": {
+          "email": "Email address",
+          "password": "App password",
+          "allowed_user": "Allowed user"
+        },
+        "data_description": {
+          "email": "Full address, also used as the login name.",
+          "password": "Stored in Home Assistant, never shown again.",
+          "allowed_user": "Requests with a token or login of any other user are rejected (403)."
+        },
+        "sections": {
+          "server": {
+            "name": "Server",
+            "description": "GMX defaults; change only for another provider.",
+            "data": {
+              "imap_host": "IMAP server",
+              "imap_port": "IMAP port",
+              "imap_security": "IMAP security",
+              "smtp_host": "SMTP server",
+              "smtp_port": "SMTP port",
+              "smtp_security": "SMTP security"
+            }
+          }
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in to GMX again",
+        "description": "GMX rejected the login for {account}. Either the app password was revoked or GMX switched off IMAP access after a period without use. Check the IMAP setting in GMX and enter an app password.",
+        "data": {
+          "password": "App password"
+        }
+      },
+      "reconfigure": {
+        "title": "Change {account}",
+        "description": "Allowed user and server settings. Address and password stay unchanged.",
         "data": {
           "allowed_user": "Allowed user"
         },
         "data_description": {
-          "allowed_user": "Requests with a token of any other user are rejected (403)."
+          "allowed_user": "Requests with a token or login of any other user are rejected (403)."
+        },
+        "sections": {
+          "server": {
+            "name": "Server",
+            "data": {
+              "imap_host": "IMAP server",
+              "imap_port": "IMAP port",
+              "imap_security": "IMAP security",
+              "smtp_host": "SMTP server",
+              "smtp_port": "SMTP port",
+              "smtp_security": "SMTP security"
+            }
+          }
         }
       }
     },
+    "error": {
+      "invalid_email": "Invalid email address.",
+      "invalid_user": "Choose an active user.",
+      "invalid_auth_or_imap_disabled": "Login rejected: wrong app password, or IMAP access is switched off in GMX.",
+      "smtp_auth_failed": "The SMTP login was rejected (IMAP worked).",
+      "tls_error": "Secure connection failed (TLS or certificate).",
+      "cannot_connect": "The server cannot be reached.",
+      "unknown": "Unexpected error, see the log."
+    },
     "abort": {
-      "no_users": "There is no active Home Assistant user to choose."
+      "no_users": "There is no active Home Assistant user to choose.",
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "Login works again.",
+      "reconfigure_successful": "Settings changed."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MCP access and tools",
+        "description": "**Connection URL:** `{url}`\n\n**claude.ai:** add a custom connector with this URL and sign in with the allowed Home Assistant user.\n\n**Claude Code:** create a long-lived access token as the allowed user (Profile > Security), then run:\n\n`{claude_code}`\n\nOnly the tools switched on below are visible and callable. Default: read-only tools.",
+        "data": {
+          "enabled_tools": "Enabled tools"
+        },
+        "data_description": {
+          "enabled_tools": "Changes apply immediately, without a restart."
+        }
+      }
+    }
+  },
+  "selector": {
+    "security": {
+      "options": {
+        "ssl": "TLS (implicit)",
+        "starttls": "STARTTLS"
+      }
+    },
+    "enabled_tools": {
+      "options": {
+        "gmx_get_status": "Read: status of the connection (gmx_get_status)"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth_or_imap_disabled": {
+      "message": "GMX rejected the login: wrong app password, or IMAP access is switched off."
+    },
+    "tls_error": {
+      "message": "Secure connection to the mail server failed."
+    },
+    "cannot_connect": {
+      "message": "The mail server cannot be reached."
+    }
+  },
+  "issues": {
+    "imap_possibly_disabled": {
+      "title": "GMX login rejected for {account}",
+      "description": "GMX rejected the login. GMX switches IMAP access off after a period without use, and then reports a wrong password. Enable \"POP3 and IMAP access\" in the GMX settings again, then re-authenticate the integration (new app password if it was revoked)."
     }
   }
 }

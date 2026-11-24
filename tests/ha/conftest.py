@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Generator
 from datetime import timedelta
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from aiohttp.test_utils import TestClient
@@ -14,7 +15,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
-from custom_components.gmx_mail_mcp.const import CONF_ALLOWED_USER, DOMAIN
+from custom_components.gmx_mail_mcp.const import (
+    CONF_ALLOWED_USER,
+    CONF_EMAIL,
+    CONF_IMAP_HOST,
+    CONF_IMAP_PORT,
+    CONF_IMAP_SECURITY,
+    CONF_PASSWORD,
+    CONF_SMTP_HOST,
+    CONF_SMTP_PORT,
+    CONF_SMTP_SECURITY,
+    DOMAIN,
+)
+from tests.client.fakes import EMAIL, PASSWORD, FakeImapServer, FakeSmtpServer
 
 MCP_HEADERS = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
 
@@ -22,6 +35,40 @@ MCP_HEADERS = {"Content-Type": "application/json", "Accept": "application/json, 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Load the integration from ``custom_components``."""
+
+
+@pytest.fixture(autouse=True)
+def imap_server() -> Generator[FakeImapServer]:
+    """In-memory IMAP server for every test: no test can reach a real mail server."""
+    server = FakeImapServer()
+    with patch("custom_components.gmx_mail_mcp.client.imap.IMAPClient", server):
+        yield server
+
+
+@pytest.fixture(autouse=True)
+def smtp_server() -> Generator[FakeSmtpServer]:
+    """In-memory SMTP server for every test."""
+    server = FakeSmtpServer()
+    with (
+        patch("custom_components.gmx_mail_mcp.client.smtp.smtplib.SMTP", server.factory(implicit_tls=False)),
+        patch("custom_components.gmx_mail_mcp.client.smtp.smtplib.SMTP_SSL", server.factory(implicit_tls=True)),
+    ):
+        yield server
+
+
+def entry_data(user_id: str, email: str = EMAIL) -> dict[str, Any]:
+    """Config entry data as the config flow stores it (GMX defaults)."""
+    return {
+        CONF_EMAIL: email,
+        CONF_PASSWORD: PASSWORD,
+        CONF_ALLOWED_USER: user_id,
+        CONF_IMAP_HOST: "imap.gmx.net",
+        CONF_IMAP_PORT: 993,
+        CONF_IMAP_SECURITY: "ssl",
+        CONF_SMTP_HOST: "mail.gmx.net",
+        CONF_SMTP_PORT: 587,
+        CONF_SMTP_SECURITY: "starttls",
+    }
 
 
 @pytest.fixture
@@ -54,11 +101,12 @@ def make_token(hass: HomeAssistant) -> Callable[[User], Awaitable[str]]:
 
 
 @pytest.fixture
-def add_entry(hass: HomeAssistant) -> Callable[[User], Awaitable[MockConfigEntry]]:
+def add_entry(hass: HomeAssistant) -> Callable[..., Awaitable[MockConfigEntry]]:
     """Add and set up an entry that admits the given user."""
 
-    async def _add(user: User) -> MockConfigEntry:
-        entry = MockConfigEntry(domain=DOMAIN, data={CONF_ALLOWED_USER: user.id}, title="GMX Mail MCP")
+    async def _add(user: User, options: dict[str, Any] | None = None) -> MockConfigEntry:
+        email = f"user-{user.id[:8]}@gmx.test"
+        entry = MockConfigEntry(domain=DOMAIN, data=entry_data(user.id, email), options=options or {}, title=email, unique_id=email)
         entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

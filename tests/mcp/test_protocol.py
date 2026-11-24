@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
 
+from custom_components.gmx_mail_mcp.const import Permission
 from custom_components.gmx_mail_mcp.mcp.protocol import (
     INVALID_PARAMS,
     INVALID_REQUEST,
@@ -20,7 +22,6 @@ from custom_components.gmx_mail_mcp.mcp.protocol import (
     ToolResult,
     parse_error,
 )
-from custom_components.gmx_mail_mcp.mcp.spike import SPIKE_STATUS
 
 
 async def _echo(arguments: dict[str, Any]) -> ToolResult:
@@ -31,8 +32,22 @@ async def _boom(arguments: dict[str, Any]) -> ToolResult:
     raise RuntimeError("secret internal detail")
 
 
-ECHO = Tool(name="t_echo", title="Echo", description="d", input_schema={"type": "object"}, handler=_echo)
-BOOM = Tool(name="t_boom", title="Boom", description="d", input_schema={"type": "object"}, handler=_boom)
+async def _noargs(arguments: dict[str, Any]) -> ToolResult:
+    return ToolResult.text("plain")
+
+
+async def _slow(arguments: dict[str, Any]) -> ToolResult:
+    await asyncio.sleep(10)
+    return ToolResult.text("never")
+
+
+def _tool(name: str, handler: Any, level: Permission = Permission.READ) -> Tool:
+    return Tool(name=name, title=name.title(), description="d", input_schema={"type": "object"}, level=level, handler=handler)
+
+
+ECHO = _tool("t_echo", _echo)
+BOOM = _tool("t_boom", _boom)
+PLAIN = _tool("t_plain", _noargs)
 
 
 def _server(*tools: Tool) -> McpServer:
@@ -77,37 +92,51 @@ async def test_ping() -> None:
 
 
 async def test_tools_list_and_call() -> None:
-    server = _server(ECHO, SPIKE_STATUS)
+    server = _server(ECHO, PLAIN)
     listed = await server.handle_message(_req("tools/list"))
     assert listed.body is not None
     tools = listed.body["result"]["tools"]
-    assert [t["name"] for t in tools] == ["t_echo", "gmx_spike_status"]
-    spike = tools[1]
-    assert spike["inputSchema"] == {"type": "object", "properties": {}, "additionalProperties": False}
-    assert spike["annotations"]["readOnlyHint"] is True
-    assert spike["annotations"]["destructiveHint"] is False
+    assert [t["name"] for t in tools] == ["t_echo", "t_plain"]
+    assert tools[0]["inputSchema"] == {"type": "object"}
+    assert tools[0]["title"] == "T_Echo"
 
     called = await server.handle_message(_req("tools/call", {"name": "t_echo", "arguments": {"b": 1, "a": 2}}))
     assert called.body is not None
     assert called.body["result"] == {"content": [{"type": "text", "text": "echo:['a', 'b']"}], "isError": False}
 
 
+@pytest.mark.parametrize(
+    ("level", "read_only", "destructive"),
+    [
+        (Permission.READ, True, False),
+        (Permission.ORGANIZE, False, False),
+        (Permission.DELETE, False, True),
+        (Permission.SEND, False, False),
+    ],
+)
+def test_annotations_follow_level(level: Permission, read_only: bool, destructive: bool) -> None:
+    annotations = _tool("x", _noargs, level).as_dict()["annotations"]
+    assert annotations["readOnlyHint"] is read_only
+    assert annotations["destructiveHint"] is destructive
+    assert annotations["openWorldHint"] is True
+
+
 @pytest.mark.parametrize("arguments", [None, {}])
 async def test_tools_call_without_arguments(arguments: Any) -> None:
-    params: dict[str, Any] = {"name": "gmx_spike_status"}
+    params: dict[str, Any] = {"name": "t_plain"}
     if arguments is not None:
         params["arguments"] = arguments
-    outcome = await _server(SPIKE_STATUS).handle_message(_req("tools/call", params))
+    outcome = await _server(PLAIN).handle_message(_req("tools/call", params))
     assert outcome.body is not None
-    result = outcome.body["result"]
-    assert result["isError"] is False
-    assert "transport and authentication OK" in result["content"][0]["text"]
+    assert outcome.body["result"] == {"content": [{"type": "text", "text": "plain"}], "isError": False}
 
 
-async def test_spike_rejects_arguments() -> None:
-    outcome = await _server(SPIKE_STATUS).handle_message(_req("tools/call", {"name": "gmx_spike_status", "arguments": {"x": 1}}))
+async def test_tool_timeout(caplog: pytest.LogCaptureFixture) -> None:
+    server = McpServer(name="srv", version="1", tools=lambda: (_tool("t_slow", _slow),), call_timeout=0.05)
+    outcome = await server.handle_message(_req("tools/call", {"name": "t_slow"}))
     assert outcome.body is not None
-    assert outcome.body["result"]["isError"] is True
+    assert outcome.body["result"] == {"content": [{"type": "text", "text": "Tool call timed out"}], "isError": True}
+    assert "timed out" in caplog.text
 
 
 async def test_tool_list_is_evaluated_per_message() -> None:

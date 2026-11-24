@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
@@ -24,7 +25,7 @@ from custom_components.gmx_mail_mcp.mcp.protocol import LATEST_PROTOCOL_VERSION
 from .conftest import MCP_HEADERS, bearer, rpc
 
 type MakeToken = Callable[[User], Awaitable[str]]
-type AddEntry = Callable[[User], Awaitable[MockConfigEntry]]
+type AddEntry = Callable[..., Awaitable[MockConfigEntry]]
 
 
 @pytest.fixture
@@ -65,12 +66,12 @@ async def test_initialize_list_and_call_with_long_lived_token(client: TestClient
     assert await resp.read() == b""
 
     resp = await _post(client, entry.entry_id, rpc("tools/list", request_id=2), headers)
-    assert [t["name"] for t in (await resp.json())["result"]["tools"]] == ["gmx_spike_status"]
+    assert [t["name"] for t in (await resp.json())["result"]["tools"]] == ["gmx_get_status"]
 
-    resp = await _post(client, entry.entry_id, rpc("tools/call", {"name": "gmx_spike_status", "arguments": {}}, 3), headers)
+    resp = await _post(client, entry.entry_id, rpc("tools/call", {"name": "gmx_get_status", "arguments": {}}, 3), headers)
     result = (await resp.json())["result"]
     assert result["isError"] is False
-    assert "transport and authentication OK" in result["content"][0]["text"]
+    assert json.loads(result["content"][0]["text"])["connection"] == "ok"
 
 
 async def test_ping(client: TestClient, entry: MockConfigEntry, token: str) -> None:
@@ -278,7 +279,7 @@ async def test_token_never_logged(
 ) -> None:
     caplog.set_level("DEBUG")
     foreign = foreign_token
-    await _post(client, entry.entry_id, rpc("tools/call", {"name": "gmx_spike_status"}), bearer(token))
+    await _post(client, entry.entry_id, rpc("tools/call", {"name": "gmx_get_status"}), bearer(token))
     await _post(client, entry.entry_id, rpc("ping"), bearer(foreign))
     assert token not in caplog.text
     assert foreign not in caplog.text
