@@ -30,7 +30,8 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
   (nur der im Config-Flow gewählte Benutzer, D9). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
 - **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Eigene schlanke JSON-RPC-Schicht,
   kein `mcp`-Python-SDK (D20).
-- **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
+- **Anmeldung (D22):** Claude Code u. a. mit Long-Lived Token als Bearer; claude.ai per OAuth mit HA als Anmeldestelle (HA-Login des MCP-Benutzers). HA liefert dafür die 401-Challenge und die `.well-known`-Dokumente selbst; eigener OAuth-Code entfällt.
+- **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Frühere Annahme (überholt durch D22):** Der Connector in claude.ai erwartet nach bisherigem
   Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Der Nutzer betreibt ha-mcp auf diese Weise (D8); trotzdem vor allem anderen per Spike prüfen (M0).
 - **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto; ohne Sensoren keine dauerhafte IDLE-Verbindung (D15).
 
@@ -89,7 +90,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 
 - Config-Flow: E-Mail, App-Passwort, Hosts/Ports (Voreinstellung GMX), Prüfung von IMAP- und SMTP-Login. Reauth, Reconfigure, Options-Flow.
 - Optionen: `enabled_tools`, Versand-Modus, Allowlist, Limits (aus `const.py`/`options.py` der Vorlage), Größenlimit Anhänge, Ordner-Overrides, Audit-Aufbewahrung.
-- Endpunkt-URL und eine Kopiervorlage für die Client-Konfiguration werden im Options-Flow angezeigt (kein Token).
+- Verbindungs-URL (extern/Nabu Casa, sonst intern; wie ha-mcp auf dem Konfigurieren-Bildschirm) und eine Kopiervorlage für Claude Code werden im Options-Flow angezeigt (kein Token), D22.
 
 ## 7. Tests
 
