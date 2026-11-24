@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from custom_components.gmx_mail_mcp.client.structure import _params, attachments, find_text_parts, parse_bodystructure
+import base64
+
+from custom_components.gmx_mail_mcp.client.structure import PartInfo, _params, attachments, find_text_parts, parse_bodystructure
 
 from .bodystructures import ALTERNATIVE_WITH_PDF, FORWARDED_MESSAGE, HTML_ONLY, PLAIN, RELATED_INLINE_IMAGE, TEXT_ATTACHMENT
 
@@ -86,3 +88,18 @@ def test_tolerates_short_and_malformed_structures() -> None:
     assert part.size == 0 and part.encoding == "7bit" and part.charset is None
     (part,) = parse_bodystructure((b"application", b"zip", None, None, None, b"base64", b"x"))
     assert part.size == 0 and part.is_attachment
+
+
+def test_size_estimated_from_encoded_size() -> None:
+    """base64 with 76-character lines + CRLF: up to 2 bytes high (padding); live case from M2 (72 110 -> 52 695) exact."""
+
+    def part(size: int, encoding: str) -> PartInfo:
+        return PartInfo("2", "application/pdf", size, encoding, None, "a.pdf", "attachment", None)
+
+    assert part(72_110, "base64").size_estimated == 52_695
+    for length in (1, 57, 58, 1000, 52_695, 300_001):
+        encoded = base64.encodebytes(bytes(length)).replace(b"\n", b"\r\n")  # MIME: 76 characters per line, CRLF
+        assert part(len(encoded), "base64").size_estimated in (length, length + 1, length + 2)  # padding not visible
+    assert part(500, "quoted-printable").size_estimated == 500  # upper bound
+    assert part(500, "7bit").size_estimated == 500
+    assert part(0, "base64").size_estimated == 0

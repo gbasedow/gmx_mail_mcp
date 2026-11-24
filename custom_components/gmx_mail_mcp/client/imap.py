@@ -124,6 +124,15 @@ class ImapSession(Protocol):
     def thread(self, algorithm: str = "REFERENCES", criteria: Any = "ALL", charset: str = "UTF-8") -> Any:
         """UID THREAD (RFC 5256): nested tuples of UIDs."""
 
+    def list_sub_folders(self, directory: str = "", pattern: str = "*") -> list[RawFolder]:
+        """LSUB: the subscribed folders."""
+
+    def subscribe_folder(self, folder: str) -> Any:
+        """SUBSCRIBE."""
+
+    def unsubscribe_folder(self, folder: str) -> Any:
+        """UNSUBSCRIBE."""
+
 
 class Executor(Protocol):
     """Runs a blocking callable outside the event loop (``hass.async_add_executor_job``)."""

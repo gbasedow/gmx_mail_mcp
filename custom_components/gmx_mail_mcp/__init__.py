@@ -21,11 +21,12 @@ from .client.imap import ConnectionLimiter, ImapWorker
 from .connection import (
     async_create_auth_issue,
     async_delete_auth_issue,
+    async_update_new_tools_issue,
     create_tls_context,
     imap_settings_from_data,
     smtp_settings_from_data,
 )
-from .const import CONF_ALLOWED_USER, DOMAIN, IDLE_CHECK_INTERVAL_S
+from .const import CONF_ALLOWED_USER, CONF_EMAIL, DOMAIN, IDLE_CHECK_INTERVAL_S
 from .http import McpView
 from .mcp.protocol import McpServer
 from .mcp.registry import ToolContext, build_tools, enabled_tools
@@ -81,7 +82,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
 
     integration = await async_get_integration(hass, DOMAIN)
     tools = build_tools(
-        ToolContext(worker=worker, options=lambda: entry.options, executor=hass.async_add_executor_job, account=entry.title)
+        ToolContext(
+            worker=worker,
+            options=lambda: entry.options,
+            executor=hass.async_add_executor_job,
+            account=entry.title,
+            email=entry.data[CONF_EMAIL],
+        )
     )
     server = McpServer(
         name=DOMAIN,
@@ -89,6 +96,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
         # Read per message: switching a tool in the options takes effect without a reload.
         tools=lambda: enabled_tools(tools, entry.options),
     )
+    async_update_new_tools_issue(hass, entry)
+
+    async def _options_updated(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> None:
+        # Options act without a reload (switches are read per message); only the repair hint follows them.
+        async_update_new_tools_issue(hass, entry)
+
+    entry.async_on_unload(entry.add_update_listener(_options_updated))
     entry.runtime_data = RuntimeData(
         server=server,
         allowed_user_id=entry.data[CONF_ALLOWED_USER],

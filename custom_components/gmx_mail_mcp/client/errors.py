@@ -104,6 +104,19 @@ class GmxProtectedFolderDeleteError(GmxProtectedFolderError):
     """INBOX and special folders cannot be deleted."""
 
 
+class GmxProtectedTargetError(GmxProtectedFolderError):
+    """Copying or moving into this folder is reserved for another tool (the trash: ``gmx_trash``, level D)."""
+
+
+class GmxWrongFolderError(GmxMailError):
+    """The messages are not in the folder the operation needs (``reason`` is the translation key, e.g. not_in_junk)."""
+
+    def __init__(self, reason: str) -> None:
+        """Store a translation-key-like reason."""
+        super().__init__(reason)
+        self.reason = reason
+
+
 class GmxMessageTooLargeError(GmxMailError):
     """The message exceeds the server's APPENDLIMIT."""
 

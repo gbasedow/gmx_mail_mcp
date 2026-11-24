@@ -1,4 +1,4 @@
-"""Organising IMAP operations (M4, permission level O) - blocking; run with ``ImapWorker.async_run(readonly=False)``.
+"""Organising IMAP operations (permission level O) - blocking; run with ``ImapWorker.async_run(readonly=False)``.
 
 Rules (SPEC section 2 and 5, DECISIONS 37-42):
 
@@ -15,7 +15,7 @@ Rules (SPEC section 2 and 5, DECISIONS 37-42):
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -36,12 +36,15 @@ from .errors import (
     GmxMailError,
     GmxMessageTooLargeError,
     GmxProtectedFolderError,
+    GmxProtectedTargetError,
     GmxUidValidityError,
     GmxUnsupportedError,
+    GmxWrongFolderError,
 )
 from .folders import FolderMap, parse_folder_list
 from .imap import CONNECTION_ERRORS, ImapSession, ServerInfo
 from .reader import SUMMARY_HEADERS, MailRef, _find_key, _header_str, parse_headers
+from .upload import Attachment
 
 SYSTEM_FLAGS: Mapping[str, str] = {"seen": "\\Seen", "flagged": "\\Flagged", "answered": "\\Answered"}
 KEYWORD_RE = re.compile(r"^\$?[A-Za-z0-9_.\-]{1,64}$")
@@ -50,6 +53,10 @@ RESERVED_KEYWORDS = frozenset({"deleted", "draft", "recent"})
 FOLDER_NAME_FORBIDDEN = re.compile(r"[/%*\x00-\x1f\x7f]")
 MAX_FOLDER_NAME = 100
 MESSAGE_ID_FALLBACK_SCAN = 20  # newest UIDs in the target folder checked when COPYUID is missing
+# Keywords for the spam state as registered in RFC 9051 section 2.3.2 ($Junk / $NotJunk).
+SPAM_KEYWORD = "$Junk"
+NOT_SPAM_KEYWORD = "$NotJunk"
+REPLY_PREFIXES = ("re:", "aw:")  # German clients answer with "AW:"; a draft reply keeps an existing prefix
 _UID_SET_RE = re.compile(r"\[?(COPYUID|APPENDUID) (\d+) ([\d:,]+)(?: ([\d:,]+))?\]?", re.IGNORECASE)
 
 
@@ -207,8 +214,21 @@ def set_flags(session: ImapSession, info: ServerInfo, refs: Sequence[MailRef], a
 # --------------------------------------------------------------------------- move / copy
 
 
-def copy_or_move(session: ImapSession, info: ServerInfo, refs: Sequence[MailRef], target: str, *, move: bool) -> WriteResult:
-    """Copy or move messages; returns new references in the order of ``refs`` (None where unknown)."""
+def copy_or_move(
+    session: ImapSession,
+    info: ServerInfo,
+    refs: Sequence[MailRef],
+    target: str,
+    *,
+    move: bool,
+    forbidden_targets: Collection[str] = (),
+) -> WriteResult:
+    """Copy or move messages; returns new references in the order of ``refs`` (None where unknown).
+
+    ``forbidden_targets`` are folders reserved for other tools (the trash: deleting is level D, decision D32).
+    """
+    if target in forbidden_targets:
+        raise GmxProtectedTargetError("protected_target")
     if move and not info.has("MOVE") and not info.has("UIDPLUS"):
         # COPY + \\Deleted would need a mailbox-wide EXPUNGE without UIDPLUS - never allowed.
         raise GmxUnsupportedError("move_unsupported")
@@ -281,6 +301,48 @@ def _find_by_message_id(
     return {ref: MailRef(target, by_id[mid], validity).as_dict() for ref, mid in wanted.items() if mid in by_id}
 
 
+# --------------------------------------------------------------------------- spam
+
+
+def _try_keywords(session: ImapSession, info: ServerInfo, refs: Sequence[MailRef], add: str, remove: str) -> bool:
+    """Set ``add`` and clear ``remove`` where the folder allows keywords; False if a folder does not."""
+    allowed = True
+    for folder, group in _group_refs(refs).items():
+        with open_folder(session, info, folder, readonly=False) as response:
+            permanent = [f.decode() if isinstance(f, bytes) else str(f) for f in response.get(b"PERMANENTFLAGS", ())]
+            if "\\*" not in permanent:
+                allowed = False
+                continue
+            present, _missing = _existing(session, group, int(response.get(b"UIDVALIDITY", 0)))
+            uids = [r.uid for r in present]
+            if uids:
+                session.add_flags(uids, [add], silent=True)
+                session.remove_flags(uids, [remove], silent=True)
+    return allowed
+
+
+def mark_spam(session: ImapSession, info: ServerInfo, folder_map: FolderMap, refs: Sequence[MailRef], *, spam: bool) -> WriteResult:
+    """Spam: move into the junk folder with ``$Junk``. Not spam: from the junk folder into the inbox with ``$NotJunk``.
+
+    The keyword is set before the move (MOVE keeps flags), so the new reference need not be known. GMX deletes mail in
+    the junk folder after 30 days (GMX-NOTES row 17); whether GMX learns from these moves is unknown.
+    """
+    junk = folder_map.get(FolderRole.JUNK)
+    if not junk:
+        raise GmxFolderNotFoundError("no junk folder")
+    inbox = folder_map.get(FolderRole.INBOX) or "INBOX"
+    if not spam and any(ref.folder != junk for ref in refs):
+        raise GmxWrongFolderError("not_in_junk")
+    add, remove = (SPAM_KEYWORD, NOT_SPAM_KEYWORD) if spam else (NOT_SPAM_KEYWORD, SPAM_KEYWORD)
+    if spam and any(ref.folder == junk for ref in refs):
+        raise GmxInvalidFolderNameError("same_folder")
+    keywords_set = _try_keywords(session, info, refs, add, remove)
+    result = copy_or_move(session, info, refs, junk if spam else inbox, move=True)
+    if not keywords_set:
+        result.warnings.append("keywords_not_supported")
+    return result
+
+
 # --------------------------------------------------------------------------- folders
 
 
@@ -312,6 +374,16 @@ def create_folder(session: ImapSession, info: ServerInfo, folder_map: FolderMap,
         raise GmxFolderExistsError("exists")
     session.create_folder(path)
     return path
+
+
+def set_subscription(session: ImapSession, info: ServerInfo, path: str, *, subscribed: bool) -> None:
+    """SUBSCRIBE or UNSUBSCRIBE an existing folder (only changes which folders mail clients show)."""
+    if path not in {f.name for f in parse_folder_list(session.list_folders())}:
+        raise GmxFolderNotFoundError("folder not found")
+    if subscribed:
+        session.subscribe_folder(path)
+    else:
+        session.unsubscribe_folder(path)
 
 
 def rename_folder(session: ImapSession, info: ServerInfo, folder_map: FolderMap, path: str, new_name: str) -> str:
@@ -346,6 +418,7 @@ class DraftInput:
     body_text: str = ""
     body_html: str | None = None
     in_reply_to: MailRef | None = None
+    attachments: Sequence[Attachment] = ()
 
 
 def parse_addresses(values: Sequence[str]) -> list[Address]:
@@ -380,7 +453,7 @@ def build_draft(draft: DraftInput, reply_headers: Mapping[str, str | None] | Non
     if reply_headers:
         original_subject = reply_headers.get("subject") or ""
         if subject is None:
-            subject = original_subject if original_subject.lower().startswith("re:") else f"Re: {original_subject}".strip()
+            subject = original_subject if original_subject.lower().startswith(REPLY_PREFIXES) else f"Re: {original_subject}".strip()
         original_id = reply_headers.get("message-id")
         if original_id:
             message["In-Reply-To"] = original_id
@@ -392,6 +465,9 @@ def build_draft(draft: DraftInput, reply_headers: Mapping[str, str | None] | Non
     message.set_content(draft.body_text)
     if draft.body_html:
         message.add_alternative(draft.body_html, subtype="html")
+    for item in draft.attachments:
+        maintype, _, subtype = item.mime.partition("/")
+        message.add_attachment(item.content, maintype=maintype, subtype=subtype or "octet-stream", filename=item.filename)
     return message
 
 

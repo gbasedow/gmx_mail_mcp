@@ -445,6 +445,82 @@ def test_draft_lands_in_entwuerfe(mailer: IMAPClient) -> None:
         mailer.unselect_folder()
 
 
+def test_m3_spam_subscription_draft_attachment_and_trash_guard(mailer: IMAPClient, folder: str) -> None:
+    """M3 paths against the GMX-like server: spam round trip with keywords, (un)subscribe, draft with attachment, trash refused."""
+    from custom_components.gmx_mail_mcp.client.errors import GmxProtectedTargetError  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.client.upload import Attachment  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.client.writer import (  # noqa: PLC0415
+        DraftInput,
+        copy_or_move,
+        mark_spam,
+        save_draft,
+        set_subscription,
+    )
+
+    info = check_imap_account(SETTINGS, _context())
+    folder_map = map_special_folders(info.folders)
+    junk, trash, inbox = folder_map.get(FolderRole.JUNK), folder_map.get(FolderRole.TRASH), folder_map.get(FolderRole.INBOX)
+    assert junk and trash and inbox
+    subject = f"Spamtest {uuid.uuid4().hex[:6]}"
+    _deliver(mailer, folder, subject)
+    validity = mailer.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+    mailer.select_folder(folder, readonly=True)
+    uid = mailer.search(["ALL"])[0]
+    mailer.unselect_folder()
+    session = open_imap_connection(SETTINGS, _context())
+    back_ref: dict[str, Any] | None = None
+    draft_ref: dict[str, Any] | None = None
+    try:
+        with pytest.raises(GmxProtectedTargetError):
+            copy_or_move(session, info, [MailRef(folder, uid, validity)], trash, move=True, forbidden_targets={trash})
+        spam = mark_spam(session, info, folder_map, [MailRef(folder, uid, validity)], spam=True)
+        assert spam.warnings == [] and spam.new_refs[0] is not None
+        junk_ref = spam.new_refs[0]
+        mailer.select_folder(junk, readonly=True)
+        assert b"$Junk" in mailer.get_flags([junk_ref["uid"]])[junk_ref["uid"]]
+        mailer.unselect_folder()
+        back = mark_spam(session, info, folder_map, [MailRef(junk, junk_ref["uid"], junk_ref["uidvalidity"])], spam=False)
+        back_ref = back.new_refs[0]
+        assert back_ref is not None and back_ref["folder"] == inbox
+        mailer.select_folder(inbox, readonly=True)
+        flags = mailer.get_flags([back_ref["uid"]])[back_ref["uid"]]
+        mailer.unselect_folder()
+        assert b"$NotJunk" in flags and b"$Junk" not in flags
+
+        set_subscription(session, info, folder, subscribed=True)
+        assert folder in {name for _f, _d, name in mailer.list_sub_folders()}
+        set_subscription(session, info, folder, subscribed=False)
+        assert folder not in {name for _f, _d, name in mailer.list_sub_folders()}
+
+        pdf = b"%PDF-1.4\n" + bytes(range(256)) * 40
+        draft_ref, _size = save_draft(
+            session,
+            info,
+            folder_map,
+            DraftInput(sender=USER, subject="Anhang", body_text="x", attachments=[Attachment("plan.pdf", pdf, "application/pdf")]),
+        )
+        assert draft_ref is not None
+        mailer.select_folder("Entwürfe", readonly=True)
+        structure = mailer.fetch([draft_ref["uid"]], ["BODYSTRUCTURE"])[draft_ref["uid"]][b"BODYSTRUCTURE"]
+        mailer.unselect_folder()
+        from custom_components.gmx_mail_mcp.client.structure import attachments, parse_bodystructure  # noqa: PLC0415
+
+        files = attachments(parse_bodystructure(structure))
+        assert [(f.filename, f.mime) for f in files] == [("plan.pdf", "application/pdf")]
+        # base64 with CRLF lines: exact up to the padding (0-2 bytes too high; 10 249 bytes -> 2 padding characters)
+        assert len(pdf) <= files[0].size_estimated <= len(pdf) + 2
+    finally:
+        session.logout()
+        # Clean up exactly what this test created (UID EXPUNGE, never a mailbox-wide EXPUNGE).
+        for box, ref in ((inbox, back_ref), ("Entwürfe", draft_ref)):
+            if ref is not None:
+                with contextlib.suppress(Exception):
+                    mailer.select_folder(box)
+                    mailer.add_flags([ref["uid"]], [b"\\Deleted"])
+                    mailer.uid_expunge([ref["uid"]])
+                    mailer.unselect_folder()
+
+
 def _kick() -> bool:
     """Disconnect all sessions of the test user server-side (like GMX's '* BYE timeout')."""
     root = Path(__file__).resolve().parent.parent.parent

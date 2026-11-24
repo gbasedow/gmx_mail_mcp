@@ -196,6 +196,12 @@ def list_folders(session: ImapSession, info: ServerInfo, folder_map: FolderMap, 
     """Return all folders with their special role and optionally message counts."""
     folders = parse_folder_list(session.list_folders())
     roles = {assignment.name: role.value for role, assignment in folder_map.roles.items()}
+    try:
+        subscribed: set[str] | None = {f.name for f in parse_folder_list(session.list_sub_folders())}
+    except CONNECTION_ERRORS:
+        raise
+    except IMAPClientError:
+        subscribed = None  # LSUB refused: the field is left out rather than guessed
     result: list[dict[str, Any]] = []
     for folder in folders:
         entry: dict[str, Any] = {
@@ -206,6 +212,8 @@ def list_folders(session: ImapSession, info: ServerInfo, folder_map: FolderMap, 
             "flags": [f for f in folder.flags if f.lower() not in ("\\haschildren", "\\hasnochildren")],
             "selectable": folder.selectable,
         }
+        if subscribed is not None:
+            entry["subscribed"] = folder.name in subscribed
         if include_counts and folder.selectable:
             try:
                 status = session.folder_status(folder.name, ["MESSAGES", "UNSEEN"])
@@ -726,7 +734,17 @@ def get_message(
         list_unsubscribe = parse_list_unsubscribe(unsubscribe, post, full=full)
 
     attachment_list = [
-        {"part_id": p.part_id, "filename": p.filename, "mime": p.mime, "size": p.size, "inline": p.inline} for p in attachments(parts)
+        {
+            "part_id": p.part_id,
+            "filename": p.filename,
+            "mime": p.mime,
+            # The encoded size misled in the M2 live test (72 110 vs. a 52 695-byte file); both are given now.
+            "size_estimated": p.size_estimated,
+            "size_encoded": p.size,
+            "encoding": p.encoding,
+            "inline": p.inline,
+        }
+        for p in attachments(parts)
     ]
     flags = [f.decode("ascii", "replace") if isinstance(f, bytes) else str(f) for f in data.get(b"FLAGS", ())]
     return MessageContent(

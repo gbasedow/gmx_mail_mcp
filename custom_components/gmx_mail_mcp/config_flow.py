@@ -41,7 +41,9 @@ from .const import (
     CONF_IMAP_HOST,
     CONF_IMAP_PORT,
     CONF_IMAP_SECURITY,
+    CONF_KNOWN_TOOLS,
     CONF_MAX_ATTACHMENT_MB,
+    CONF_MAX_UPLOAD_MB,
     CONF_PASSWORD,
     CONF_SMTP_HOST,
     CONF_SMTP_PORT,
@@ -50,15 +52,17 @@ from .const import (
     DEFAULT_IMAP_PORT,
     DEFAULT_IMAP_SECURITY,
     DEFAULT_MAX_ATTACHMENT_MB,
+    DEFAULT_MAX_UPLOAD_MB,
     DEFAULT_SMTP_HOST,
     DEFAULT_SMTP_PORT,
     DEFAULT_SMTP_SECURITY,
     DOMAIN,
     MAX_ATTACHMENT_MB,
+    MAX_UPLOAD_MB,
     SECTION_SERVER,
     Security,
 )
-from .mcp.registry import TOOL_SPECS, enabled_tool_names
+from .mcp.registry import TOOL_SPECS, enabled_tool_names, new_tool_names
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -247,7 +251,11 @@ class GmxMailMcpConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class GmxMailMcpOptionsFlow(OptionsFlow):
-    """Connection URL (D22), tool switches (D12), attachment limit (D14) and HTML output (D29). All take effect at once."""
+    """Connection URL (D22), tool switches (D12), new tools (D31), size limits (D14, D17), HTML output (D29).
+
+    All take effect at once. Saving records the tools of this version (``known_tools``), so tools of a later update can
+    be shown as new.
+    """
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the URL and the settings."""
@@ -257,11 +265,14 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
             # Catalogue order; names the selector does not offer cannot get in.
             enabled = [spec.name for spec in TOOL_SPECS if spec.name in chosen]
             limit = min(MAX_ATTACHMENT_MB, max(1, int(user_input.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB))))
+            upload = min(MAX_UPLOAD_MB, max(1, int(user_input.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB))))
             return self.async_create_entry(
                 data={
                     **options,
                     CONF_ENABLED_TOOLS: enabled,
+                    CONF_KNOWN_TOOLS: [spec.name for spec in TOOL_SPECS],
                     CONF_MAX_ATTACHMENT_MB: limit,
+                    CONF_MAX_UPLOAD_MB: upload,
                     CONF_ALLOW_HTML_OUTPUT: bool(user_input.get(CONF_ALLOW_HTML_OUTPUT, False)),
                 }
             )
@@ -283,16 +294,28 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
                     ),
                     probatio.Coerce(int),
                 ),
+                probatio.Required(CONF_MAX_UPLOAD_MB, default=DEFAULT_MAX_UPLOAD_MB): probatio.All(
+                    NumberSelector(
+                        NumberSelectorConfig(min=1, max=MAX_UPLOAD_MB, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="MB")
+                    ),
+                    probatio.Coerce(int),
+                ),
                 probatio.Required(CONF_ALLOW_HTML_OUTPUT, default=False): BooleanSelector(),
             }
         )
         suggested = {
             CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in enabled_tool_names(options)],
             CONF_MAX_ATTACHMENT_MB: int(options.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB)),
+            CONF_MAX_UPLOAD_MB: int(options.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB)),
             CONF_ALLOW_HTML_OUTPUT: bool(options.get(CONF_ALLOW_HTML_OUTPUT, False)),
         }
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),
-            description_placeholders={"url": url, "claude_code": claude_code_command(url)},
+            description_placeholders={
+                "url": url,
+                "claude_code": claude_code_command(url),
+                # Names only (language-neutral); "-" when nothing is new.
+                "new_tools": ", ".join(f"`{name}`" for name in new_tool_names(options)) or "-",
+            },
         )

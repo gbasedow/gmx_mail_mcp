@@ -244,8 +244,11 @@ def _build_search(context: ToolContext) -> Tool:
         title="Search GMX mail",
         description=(
             "Searches one folder (default inbox) and returns message summaries with a ref (folder, uid, uidvalidity) for the other "
-            "tools. Criteria are combined with AND. Newly arrived mail can take ~30 s to become searchable by text (GMX index); "
-            "search_mode and warnings say when recent mail was checked by headers instead. Page with page.next_cursor. " + _UNTRUSTED
+            "tools. Criteria are combined with AND. Text criteria are fuzzy at GMX: punctuation appears to be ignored and "
+            'parts of words match (subject "Re:" also found mails without "Re:"), so check the returned subjects when it '
+            "matters. Newly arrived mail can take ~30 s to become searchable by text (GMX index); search_mode and warnings "
+            "say when "
+            "recent mail was checked by headers instead. Page with page.next_cursor. " + _UNTRUSTED
         ),
         input_schema=_search_schema(),
         level=Permission.READ,
@@ -312,7 +315,8 @@ def _build_get_message(context: ToolContext) -> Tool:
         title="Read a GMX mail",
         description=(
             "Reads one message: headers, cleaned text (hidden text and invisible characters removed), flags and the attachment "
-            "list (part_id for gmx_get_attachment). Does not mark the message as read. Long text is paged with offset / "
+            "list (part_id for gmx_get_attachment; size_estimated is the approximate file size, size_encoded the size in the "
+            "mail). Does not mark the message as read. Long text is paged with offset / "
             "body.next_offset. format: text (default), html_as_text, html (only if allowed in the options), raw_headers. " + _UNTRUSTED
         ),
         input_schema={
@@ -400,8 +404,10 @@ def _build_get_thread(context: ToolContext) -> Tool:
         title="Show a GMX conversation",
         description=(
             "Returns the messages of the conversation a message belongs to, within its folder, oldest first. GMX offers only "
-            "THREAD=ORDEREDSUBJECT: messages are grouped by subject (Re:/Fwd: ignored), so unrelated mails with the same subject "
-            "can appear, and replies in other folders (e.g. Sent) are not included. " + _UNTRUSTED
+            "THREAD=ORDEREDSUBJECT: messages are grouped by subject with only Re:/Fw:/Fwd: ignored, so unrelated mails with "
+            'the same subject can appear, replies with the German prefixes AW:/WG: ("AW: X", "AW: AW: X") form separate '
+            "threads, and replies in other folders (e.g. Sent) are not included. To collect such replies, use gmx_search "
+            "with the subject and compare the results. " + _UNTRUSTED
         ),
         input_schema={
             "type": "object",

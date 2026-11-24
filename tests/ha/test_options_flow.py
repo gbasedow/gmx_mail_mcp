@@ -11,13 +11,21 @@ from aiohttp.test_utils import TestClient
 from homeassistant.core import HomeAssistant
 from homeassistant.core_config import async_process_ha_core_config
 from homeassistant.data_entry_flow import FlowResultType, InvalidData
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.network import NoURLAvailableError
 from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUser
 
 from custom_components.gmx_mail_mcp.connect_info import TOKEN_PLACEHOLDER, URL_PLACEHOLDER, claude_code_command, connection_url
-from custom_components.gmx_mail_mcp.const import CONF_ALLOW_HTML_OUTPUT, CONF_ENABLED_TOOLS, CONF_MAX_ATTACHMENT_MB
+from custom_components.gmx_mail_mcp.const import (
+    CONF_ALLOW_HTML_OUTPUT,
+    CONF_ENABLED_TOOLS,
+    CONF_KNOWN_TOOLS,
+    CONF_MAX_ATTACHMENT_MB,
+    CONF_MAX_UPLOAD_MB,
+    DOMAIN,
+)
 from custom_components.gmx_mail_mcp.http import endpoint_path
-from custom_components.gmx_mail_mcp.mcp.registry import default_enabled_tools
+from custom_components.gmx_mail_mcp.mcp.registry import TOOL_NAMES, TOOL_SPECS, TOOLS_WITHOUT_RECORD, default_enabled_tools
 from tests.client.fakes import PASSWORD
 
 from .conftest import bearer, rpc
@@ -75,7 +83,14 @@ async def test_switches_apply_without_reload(
     result = await _open(hass, entry)
     result = dict(await hass.config_entries.options.async_configure(result["flow_id"], {CONF_ENABLED_TOOLS: []}))
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert entry.options == {"unrelated_option": 1, CONF_ENABLED_TOOLS: [], CONF_MAX_ATTACHMENT_MB: 10, CONF_ALLOW_HTML_OUTPUT: False}
+    assert entry.options == {
+        "unrelated_option": 1,
+        CONF_ENABLED_TOOLS: [],
+        CONF_KNOWN_TOOLS: [spec.name for spec in TOOL_SPECS],
+        CONF_MAX_ATTACHMENT_MB: 10,
+        CONF_MAX_UPLOAD_MB: 10,
+        CONF_ALLOW_HTML_OUTPUT: False,
+    }
     assert entry.runtime_data.worker is worker  # no reload, connection kept
     assert await listed() == []
     resp = await client.post(endpoint_path(entry.entry_id), json=rpc("tools/call", {"name": "gmx_get_status"}), headers=headers)
@@ -122,3 +137,63 @@ async def test_attachment_limit_out_of_range_is_rejected(hass: HomeAssistant, ad
     with pytest.raises(InvalidData):
         await hass.config_entries.options.async_configure(result["flow_id"], {CONF_MAX_ATTACHMENT_MB: value})
     assert CONF_MAX_ATTACHMENT_MB not in entry.options
+
+
+# --------------------------------------------------------------------------- M3: upload limit, new tools (D31)
+
+
+async def test_upload_limit(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    entry = await add_entry(mcp_user)
+    result = await _open(hass, entry)
+    assert _suggested(result, CONF_MAX_UPLOAD_MB) == 10  # D17 default
+    await hass.config_entries.options.async_configure(result["flow_id"], {CONF_MAX_UPLOAD_MB: 20})
+    assert entry.options[CONF_MAX_UPLOAD_MB] == 20
+    for value in (0, 21):
+        result = await _open(hass, entry)
+        with pytest.raises(InvalidData):
+            await hass.config_entries.options.async_configure(result["flow_id"], {CONF_MAX_UPLOAD_MB: value})
+    assert entry.options[CONF_MAX_UPLOAD_MB] == 20
+
+
+def _issue(hass: HomeAssistant, entry: MockConfigEntry) -> ir.IssueEntry | None:
+    return ir.async_get(hass).async_get_issue(DOMAIN, f"new_tools_available_{entry.entry_id}")
+
+
+async def test_new_tools_after_update_are_shown_until_saved(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    """Options saved by 0.0.4 (no known_tools): the M3 tools stay off, a repair issue and the form name them (D31)."""
+    saved_by_old_version = {CONF_ENABLED_TOOLS: sorted(TOOLS_WITHOUT_RECORD)}
+    entry = await add_entry(mcp_user, saved_by_old_version)
+    new = [spec.name for spec in TOOL_SPECS if spec.name not in TOOLS_WITHOUT_RECORD]
+    assert new and all(name.startswith("gmx_") for name in new)
+    issue = _issue(hass, entry)
+    assert issue is not None
+    assert issue.translation_key == "new_tools_available"
+    assert issue.translation_placeholders == {"account": entry.title, "tools": ", ".join(new)}
+    result = await _open(hass, entry)
+    assert result["description_placeholders"]["new_tools"] == ", ".join(f"`{name}`" for name in new)
+    assert _suggested(result, CONF_ENABLED_TOOLS) == [spec.name for spec in TOOL_SPECS if spec.name in TOOLS_WITHOUT_RECORD]
+
+    # Saving without switching anything on acknowledges the new tools: the issue goes, nothing new is listed.
+    await hass.config_entries.options.async_configure(result["flow_id"], {CONF_ENABLED_TOOLS: sorted(TOOLS_WITHOUT_RECORD)})
+    await hass.async_block_till_done()
+    assert _issue(hass, entry) is None
+    assert set(entry.options[CONF_KNOWN_TOOLS]) == set(TOOL_NAMES)
+    assert not set(entry.options[CONF_ENABLED_TOOLS]) - TOOLS_WITHOUT_RECORD
+    result = await _open(hass, entry)
+    assert result["description_placeholders"]["new_tools"] == "-"
+
+
+async def test_no_new_tools_without_saved_choice(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    """Never saved: defaults apply (read tools on), so nothing is announced as new."""
+    entry = await add_entry(mcp_user)
+    assert _issue(hass, entry) is None
+    assert (await _open(hass, entry))["description_placeholders"]["new_tools"] == "-"
+
+
+async def test_recorded_tools_decide_what_is_new(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    """With known_tools recorded, only tools missing from that record are new."""
+    known = [spec.name for spec in TOOL_SPECS if spec.name != "gmx_save_draft"]
+    entry = await add_entry(mcp_user, {CONF_ENABLED_TOOLS: [], CONF_KNOWN_TOOLS: known})
+    issue = _issue(hass, entry)
+    assert issue is not None and issue.translation_placeholders is not None
+    assert issue.translation_placeholders["tools"] == "gmx_save_draft"

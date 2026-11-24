@@ -27,7 +27,8 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - **M1 vorhanden:** Config-Flow mit Kontodaten (mehrere Konten, Benutzerwahl, Reauth, Reconfigure), Options-Flow mit Verbindungs-URL und Tool-Schaltern (D22, D23),
   Verbindungsverwaltung (`ImapWorker`), Tool-Registry (`mcp/registry.py`), erstes Tool `gmx_get_status`. Bericht `docs/M1.md`.
 - **M2 vorhanden:** 8 Lese-Tools inkl. `gmx_get_attachment` (Text/Datei, `extract.py` mit pypdf + Standardbibliothek), Roh-Mail, Thread, Schlagwörter; Optionen Anhang-Limit und HTML. Bericht `docs/M2.md`.
-- **Noch nicht vorhanden (zu bauen):** Organisier-, Lösch- und Sende-Tools, Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
+- **M3 vorhanden:** 9 Organisier-Tools (Stufe O, Voreinstellung aus) inkl. Spam, Ordner-Abo und Entwurf mit Anhängen (`client/upload.py`), Papierkorb als Ziel gesperrt (D32), Hinweis auf neue Tools nach Updates (D31). Bericht `docs/M3.md`.
+- **Noch nicht vorhanden (zu bauen):** Lösch- und Sende-Tools, Audit-Log, `.eml` hochladen (D34). Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.
 
