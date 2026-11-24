@@ -48,20 +48,20 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) (D13) |
 | `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus mit Capabilities (M2), Audit-Log (M4) |
 | `get_thread`, `list_keywords` *(neu, M2)* | R | Gesprächsverlauf (ORDEREDSUBJECT), Schlagwörter eines Ordners (D28) |
-| `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel |
-| `create_folder`, `rename_folder` | O | Ordnerverwaltung |
-| `save_draft` | O | Entwurf per APPEND |
+| `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel; Papierkorb als Ziel gesperrt (D32), Spam mit `$Junk`/`$NotJunk` (D33) – **M3** |
+| `create_folder`, `rename_folder`, `subscribe_folder` | O | Ordnerverwaltung, Abo (D34) – **M3** |
+| `save_draft` | O | Entwurf per APPEND, Text und Anhänge (D35) – **M3** |
 | `trash` | D | In den Papierkorb |
 | `delete_permanently`, `delete_folder` | D | nur mit Option + Vorschau + Bestätigungscode (§4) |
 | `send_message`, `reply`, `forward`, `send_draft` | S | Versand-Modus `off`/`allowlist`/`any`, Vorschau + Code |
 
 Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
-`get_capabilities`, Keywords auflisten. Nicht aufgenommen: mailbox-weites `EXPUNGE`.
+`get_capabilities`, Keywords auflisten. Nicht aufgenommen: mailbox-weites `EXPUNGE`. `.eml` hochladen ist zurückgestellt (D34).
 
 ## 4. Sicherheit
 
 1. **Token:** nur gültige HA-Tokens, 401 sonst. Nur der gewählte HA-Benutzer (D9); Tokens anderer Benutzer werden mit 403 abgelehnt.
-2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus. Gespeicherte Auswahl ist explizit; neue Tools aus Updates bleiben aus (D23).
+2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus. Gespeicherte Auswahl ist explizit; neue Tools aus Updates bleiben aus (D23), ein Reparaturhinweis und das Optionsformular nennen sie bis zum nächsten Speichern (D31).
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
    Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
@@ -85,7 +85,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 - Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python; Auswahl der Bibliotheken in M2 (D10 nennt sie als offen).
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.
-- Senden mit Anhang (D17): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (konfigurierbar, Standard 10 MB),
+- Hochladen (D17, umgesetzt in M3 für Entwürfe, `client/upload.py`): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (konfigurierbar, Standard 10 MB),
   Gesamtgröße der Nachricht gegen das Limit der Optionen und `APPENDLIMIT` prüfen. Dateiname bereinigen, Typ nach Inhalt prüfen.
 
 ## 6. Konfiguration
@@ -109,7 +109,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Prüft D8 (Bearer-Weg); Nr. 7 ist mit D20 entschieden. **Stand 24.11.2026:** Claude Code ✔ (lokal, HA 2026.11.3), claude.ai offen – siehe `docs/M0-SPIKE.md`. |
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
-| M3 | Organisieren und Entwürfe (Stufe O). |
+| M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test offen – siehe `docs/M3.md`. |
 | M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. |
 | M5 | Senden (Stufe S), Gesendet-Kopie, Limits. |
 | M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
