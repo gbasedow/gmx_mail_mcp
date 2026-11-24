@@ -111,7 +111,7 @@ async def test_tools_list_and_call() -> None:
         (Permission.READ, True, False),
         (Permission.ORGANIZE, False, False),
         (Permission.DELETE, False, True),
-        (Permission.SEND, False, False),
+        (Permission.SEND, False, True),  # sending cannot be undone (M5)
     ],
 )
 def test_annotations_follow_level(level: Permission, read_only: bool, destructive: bool) -> None:

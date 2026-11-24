@@ -89,19 +89,43 @@
           "allow_permanent_delete": "Allow permanent deletion",
           "max_delete_per_day": "Daily limit for deleting mails",
           "tools_without_confirmation": "Tools without confirmation",
+          "send_mode": "Who may receive mail",
+          "allowlist": "Allowlist",
+          "allow_reply_to_sender": "Allow replies to the sender",
+          "sender_name": "Sender name",
+          "sent_copy_mode": "Copy in the Sent folder",
+          "max_recipients": "Recipients per mail",
+          "max_send_per_day": "Mails per day",
+          "max_recipients_per_hour": "Recipients per hour",
+          "max_message_size_mb": "Size limit for sent mails",
           "audit_retention_days": "Keep the audit log for"
         },
         "data_description": {
           "enabled_tools": "Changes apply immediately, without a restart.",
           "max_attachment_mb": "Largest file gmx_get_attachment and gmx_get_raw_message return (1–10 MB). claude.ai accepts only about 110 KB per answer; Claude Code up to the limit.",
-          "max_upload_mb": "Largest file (and sum of all files) per call that gmx_save_draft accepts (1–20 MB). The model has to output the file as base64; large files make the call slow.",
+          "max_upload_mb": "Largest file (and sum of all files) per call that gmx_save_draft and gmx_send_message accept (1–20 MB). The model has to output the file as base64; large files make the call slow.",
           "allow_html_output": "Lets gmx_get_message return cleaned HTML (format html). Off: text only.",
           "allow_permanent_delete": "Lets gmx_delete_permanently remove mails in the trash or spam folder for good. Off: only the trash.",
           "max_delete_per_day": "Mails per local day that gmx_trash and gmx_delete_permanently may delete together. 0 = no limit (default). Each call takes at most 50 mails.",
-          "tools_without_confirmation": "These tools act on the first call, without preview and confirmation code. Risk: a single misled instruction then deletes at once. Default: none.",
+          "tools_without_confirmation": "These tools act on the first call, without preview and confirmation code. Risk: a single misled instruction then deletes or sends at once. Default: none.",
+          "send_mode": "Only the allowlist: an empty list means nothing can be sent. Any address: every recipient is allowed (the list stays stored for switching back). The sending tools themselves are switched on above.",
+          "allowlist": "One entry per line (or separated by commas): an exact address (anna@example.org) or a whole domain (*@example.org, without subdomains). Used in the mode \"only the allowlist\".",
+          "allow_reply_to_sender": "Lets gmx_reply answer the sender (From) of any received mail even if it is not on the allowlist. Risk: a crafted mail gets a way out if the model falls for it. A different Reply-To address and further recipients always need the allowlist. Default: off.",
+          "sender_name": "Optional display name before the account address (max. 100 characters). Recommended: mails without a name ended up in GMX spam in a test.",
+          "sent_copy_mode": "GMX stores no copy when sending via SMTP. Append: the integration always stores one (default). Auto: only if none is found. None: no copy.",
+          "max_recipients": "To, Cc and Bcc together, at least 1. Default 10.",
+          "max_send_per_day": "Mails per local day across all sending tools. 0 = no limit. Default 20. GMX does not publish its limits; many mails risk a block of the account.",
+          "max_recipients_per_hour": "Recipients in the last 60 minutes across all sending tools. 0 = no limit. Default 10 (an unconfirmed source names 11 per hour as GMX limit).",
+          "max_message_size_mb": "Largest message including attachments that the sending tools send (1–100 MB). Default 20 MB (GMX FreeMail limit).",
           "audit_retention_days": "Days (1–365) an audit entry is kept; at most 5000 entries. Entries contain no mail content, subjects or addresses."
         }
       }
+    },
+    "error": {
+      "invalid_send_mode": "Unknown send mode.",
+      "invalid_allowlist_entry": "The allowlist contains an entry that is neither an address nor *@domain.",
+      "wildcard_not_allowed": "\"*\" is not an allowlist entry; choose \"Any address\" instead.",
+      "invalid_sender_name": "The sender name is too long (max. 100 characters) or contains < > \" or control characters."
     }
   },
   "selector": {
@@ -133,13 +157,34 @@
         "gmx_save_draft": "Organise: save drafts, with attachments; does not send (gmx_save_draft)",
         "gmx_trash": "Delete: move mails into the trash (gmx_trash)",
         "gmx_delete_permanently": "Delete: delete mails in trash/spam for good – needs the option below (gmx_delete_permanently)",
-        "gmx_delete_folder": "Delete: delete empty folders (gmx_delete_folder)"
+        "gmx_delete_folder": "Delete: delete empty folders (gmx_delete_folder)",
+        "gmx_send_message": "Send: new mail, with attachments (gmx_send_message)",
+        "gmx_reply": "Send: reply to a mail (gmx_reply)",
+        "gmx_forward": "Send: forward a mail with its attachments (gmx_forward)",
+        "gmx_send_draft": "Send: send a draft and remove it from Drafts (gmx_send_draft)"
       }
     },
     "tools_without_confirmation": {
       "options": {
         "gmx_delete_permanently": "Delete mails permanently without confirmation (gmx_delete_permanently)",
-        "gmx_delete_folder": "Delete empty folders without confirmation (gmx_delete_folder)"
+        "gmx_delete_folder": "Delete empty folders without confirmation (gmx_delete_folder)",
+        "gmx_send_message": "Send new mails without confirmation (gmx_send_message)",
+        "gmx_reply": "Send replies without confirmation (gmx_reply)",
+        "gmx_forward": "Forward without confirmation (gmx_forward)",
+        "gmx_send_draft": "Send drafts without confirmation (gmx_send_draft)"
+      }
+    },
+    "send_mode": {
+      "options": {
+        "allowlist": "Only the allowlist",
+        "any": "Any address"
+      }
+    },
+    "sent_copy_mode": {
+      "options": {
+        "append": "Always store a copy",
+        "auto": "Store a copy if none is found",
+        "none": "No copy"
       }
     }
   },
@@ -162,6 +207,10 @@
     "new_tools_available": {
       "title": "New tools available for {account}",
       "description": "An update added tools that stay off until you switch them on: {tools}. Open Settings > Devices & services > GMX Mail MCP > Configure, choose the tools you want and save. This notice then disappears, even if you switch nothing on."
+    },
+    "smtp_auth_failed": {
+      "title": "GMX rejected the SMTP login for {account}",
+      "description": "Sending failed because GMX rejected the login (app password revoked or changed). Nothing was sent. Re-authenticate the integration with a valid app password."
     }
   }
 }

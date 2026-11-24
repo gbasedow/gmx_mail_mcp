@@ -215,6 +215,9 @@ async def test_reconfigure_user_and_server(hass: HomeAssistant, mcp_user: MockUs
     assert entry.data[CONF_SMTP_HOST] == "smtp.example.test"
     assert entry.data[CONF_PASSWORD] == PASSWORD  # unchanged
     assert entry.data[CONF_EMAIL] == EMAIL
+    # The reload runs in the background; wait for it, or its interval timer would outlive the test (flaky teardown).
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
 
 
 async def test_reconfigure_validation_error(hass: HomeAssistant, mcp_user: MockUser, imap_server: FakeImapServer) -> None:

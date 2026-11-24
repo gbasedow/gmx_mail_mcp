@@ -89,19 +89,43 @@
           "allow_permanent_delete": "Endgültiges Löschen erlauben",
           "max_delete_per_day": "Tageslimit für gelöschte Mails",
           "tools_without_confirmation": "Tools ohne Bestätigung",
+          "send_mode": "Wer darf Mails erhalten",
+          "allowlist": "Allowlist",
+          "allow_reply_to_sender": "Antworten an den Absender erlauben",
+          "sender_name": "Absendername",
+          "sent_copy_mode": "Kopie im Ordner Gesendet",
+          "max_recipients": "Empfänger je Mail",
+          "max_send_per_day": "Mails pro Tag",
+          "max_recipients_per_hour": "Empfänger pro Stunde",
+          "max_message_size_mb": "Größenlimit für gesendete Mails",
           "audit_retention_days": "Audit-Log aufbewahren"
         },
         "data_description": {
           "enabled_tools": "Änderungen wirken sofort, ohne Neustart.",
           "max_attachment_mb": "Größte Datei, die gmx_get_attachment und gmx_get_raw_message liefern (1–10 MB). claude.ai nimmt je Antwort nur etwa 110 KB an, Claude Code bis zum Limit.",
-          "max_upload_mb": "Größte Datei (und Summe aller Dateien) je Aufruf, die gmx_save_draft annimmt (1–20 MB). Das Modell muss die Datei als base64 ausgeben; große Dateien machen den Aufruf langsam.",
+          "max_upload_mb": "Größte Datei (und Summe aller Dateien) je Aufruf, die gmx_save_draft und gmx_send_message annehmen (1–20 MB). Das Modell muss die Datei als base64 ausgeben; große Dateien machen den Aufruf langsam.",
           "allow_html_output": "Erlaubt gmx_get_message, bereinigtes HTML zu liefern (format html). Aus: nur Text.",
           "allow_permanent_delete": "Erlaubt gmx_delete_permanently, Mails im Papierkorb oder Spamordner endgültig zu löschen. Aus: nur Papierkorb.",
           "max_delete_per_day": "Mails je Kalendertag, die gmx_trash und gmx_delete_permanently zusammen löschen dürfen. 0 = ohne Limit (Standard). Je Aufruf höchstens 50 Mails.",
-          "tools_without_confirmation": "Diese Tools handeln beim ersten Aufruf, ohne Vorschau und Bestätigungscode. Risiko: Eine einzige fehlgeleitete Anweisung löscht dann sofort. Standard: keine.",
+          "tools_without_confirmation": "Diese Tools handeln beim ersten Aufruf, ohne Vorschau und Bestätigungscode. Risiko: Eine einzige fehlgeleitete Anweisung löscht oder sendet dann sofort. Voreinstellung: keine.",
+          "send_mode": "Nur Allowlist: Bei leerer Liste kann nichts gesendet werden. Beliebige Adressen: Jeder Empfänger ist erlaubt (die Liste bleibt für das Zurückschalten gespeichert). Die Sende-Tools selbst werden oben eingeschaltet.",
+          "allowlist": "Ein Eintrag je Zeile (oder durch Kommas getrennt): eine genaue Adresse (anna@example.org) oder eine ganze Domain (*@example.org, ohne Subdomains). Gilt im Modus „Nur Allowlist“.",
+          "allow_reply_to_sender": "Erlaubt gmx_reply, dem Absender (From) jeder empfangenen Mail zu antworten, auch wenn er nicht auf der Allowlist steht. Risiko: Eine präparierte Mail bekommt einen Weg nach draußen, wenn das Modell darauf hereinfällt. Eine abweichende Reply-To-Adresse und weitere Empfänger brauchen immer die Allowlist. Voreinstellung: aus.",
+          "sender_name": "Optionaler Anzeigename vor der Kontoadresse (max. 100 Zeichen). Empfohlen: Mails ohne Namen landeten in einem Test im GMX-Spam.",
+          "sent_copy_mode": "GMX legt beim Senden per SMTP keine Kopie an. Immer: Die Integration legt immer eine ab (Voreinstellung). Auto: nur, wenn keine gefunden wird. Keine: keine Kopie.",
+          "max_recipients": "An, Cc und Bcc zusammen, mindestens 1. Voreinstellung 10.",
+          "max_send_per_day": "Mails je lokalem Kalendertag über alle Sende-Tools. 0 = ohne Limit. Voreinstellung 20. GMX veröffentlicht seine Grenzen nicht; viele Mails riskieren eine Sperre des Kontos.",
+          "max_recipients_per_hour": "Empfänger der letzten 60 Minuten über alle Sende-Tools. 0 = ohne Limit. Voreinstellung 10 (eine unbestätigte Quelle nennt 11 pro Stunde als GMX-Grenze).",
+          "max_message_size_mb": "Größte Mail samt Anhängen, die die Sende-Tools senden (1–100 MB). Voreinstellung 20 MB (Limit von GMX FreeMail).",
           "audit_retention_days": "Tage (1–365), die ein Audit-Eintrag aufbewahrt wird; höchstens 5000 Einträge. Einträge enthalten keine Mailinhalte, Betreffs oder Adressen."
         }
       }
+    },
+    "error": {
+      "invalid_send_mode": "Unbekannter Versandmodus.",
+      "invalid_allowlist_entry": "Die Allowlist enthält einen Eintrag, der weder Adresse noch *@domain ist.",
+      "wildcard_not_allowed": "„*“ ist kein Allowlist-Eintrag; stattdessen „Beliebige Adressen“ wählen.",
+      "invalid_sender_name": "Der Absendername ist zu lang (max. 100 Zeichen) oder enthält < > \" oder Steuerzeichen."
     }
   },
   "selector": {
@@ -133,13 +157,34 @@
         "gmx_save_draft": "Organisieren: Entwurf speichern, mit Anhängen; sendet nicht (gmx_save_draft)",
         "gmx_trash": "Löschen: Mails in den Papierkorb (gmx_trash)",
         "gmx_delete_permanently": "Löschen: Mails in Papierkorb/Spam endgültig löschen – braucht die Option unten (gmx_delete_permanently)",
-        "gmx_delete_folder": "Löschen: leere Ordner löschen (gmx_delete_folder)"
+        "gmx_delete_folder": "Löschen: leere Ordner löschen (gmx_delete_folder)",
+        "gmx_send_message": "Senden: neue Mail, mit Anhängen (gmx_send_message)",
+        "gmx_reply": "Senden: auf eine Mail antworten (gmx_reply)",
+        "gmx_forward": "Senden: Mail mit Anhängen weiterleiten (gmx_forward)",
+        "gmx_send_draft": "Senden: Entwurf senden und aus Entwürfe entfernen (gmx_send_draft)"
       }
     },
     "tools_without_confirmation": {
       "options": {
         "gmx_delete_permanently": "Mails endgültig löschen ohne Bestätigung (gmx_delete_permanently)",
-        "gmx_delete_folder": "Leere Ordner löschen ohne Bestätigung (gmx_delete_folder)"
+        "gmx_delete_folder": "Leere Ordner löschen ohne Bestätigung (gmx_delete_folder)",
+        "gmx_send_message": "Neue Mails ohne Bestätigung senden (gmx_send_message)",
+        "gmx_reply": "Antworten ohne Bestätigung senden (gmx_reply)",
+        "gmx_forward": "Ohne Bestätigung weiterleiten (gmx_forward)",
+        "gmx_send_draft": "Entwürfe ohne Bestätigung senden (gmx_send_draft)"
+      }
+    },
+    "send_mode": {
+      "options": {
+        "allowlist": "Nur Allowlist",
+        "any": "Beliebige Adressen"
+      }
+    },
+    "sent_copy_mode": {
+      "options": {
+        "append": "Immer Kopie ablegen",
+        "auto": "Kopie nur, wenn keine gefunden wird",
+        "none": "Keine Kopie"
       }
     }
   },
@@ -162,6 +207,10 @@
     "new_tools_available": {
       "title": "Neue Tools für {account} verfügbar",
       "description": "Ein Update hat Tools hinzugefügt, die ausgeschaltet bleiben, bis du sie einschaltest: {tools}. Öffne Einstellungen > Geräte & Dienste > GMX Mail MCP > Konfigurieren, wähle die gewünschten Tools und speichere. Danach verschwindet dieser Hinweis, auch wenn du nichts einschaltest."
+    },
+    "smtp_auth_failed": {
+      "title": "GMX hat die SMTP-Anmeldung für {account} abgelehnt",
+      "description": "Das Senden ist gescheitert, weil GMX die Anmeldung abgelehnt hat (App-Passwort widerrufen oder geändert). Es wurde nichts gesendet. Die Integration mit einem gültigen App-Passwort neu anmelden."
     }
   }
 }

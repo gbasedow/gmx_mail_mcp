@@ -601,6 +601,163 @@ async def test_m4_tools_end_to_end(mailer: IMAPClient, folder: str) -> None:
                 mailer.delete_folder(leftover)
 
 
+def _greenmail_take(marker: str) -> dict[str, bytes]:
+    """Messages with ``marker`` in the subject from the GreenMail test inbox (subject -> raw message), then removed there."""
+    import email  # noqa: PLC0415
+    import email.policy  # noqa: PLC0415
+    import imaplib  # noqa: PLC0415
+
+    found: dict[str, bytes] = {}
+    greenmail = imaplib.IMAP4(HOST, int(os.environ.get("GREENMAIL_IMAP_PORT", "3143")))
+    try:
+        greenmail.login("test@example.test", "secret")
+        greenmail.select("INBOX")
+        for _ in range(30):
+            _typ, hits = greenmail.search(None, "SUBJECT", marker)
+            if hits and hits[0] and len(hits[0].split()) >= 4:
+                break
+            time.sleep(0.5)
+        for num in hits[0].split() if hits and hits[0] else []:
+            _typ, data = greenmail.fetch(num, "(BODY.PEEK[])")
+            raw = bytes(data[0][1]) if data and isinstance(data[0], tuple) else b""
+            found[str(email.message_from_bytes(raw, policy=email.policy.default)["Subject"])] = raw
+            greenmail.store(num, "+FLAGS", "\\Deleted")
+        greenmail.expunge()  # GreenMail test mailbox only
+    finally:
+        greenmail.logout()
+    return found
+
+
+async def test_m5_send_tools_end_to_end(mailer: IMAPClient, folder: str) -> None:
+    """M5 through the MCP tools with a real worker and real SMTP (STARTTLS, certificate check, Dovecot relays to GreenMail):
+    new mail with Bcc and attachment, reply (\\Answered), forward with attachment, draft sent and removed; one Sent copy
+    each, audit entries with recipient domains only; a recipient outside the allowlist is refused before SMTP."""
+    import email  # noqa: PLC0415
+    import email.policy  # noqa: PLC0415
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+    from base64 import b64encode  # noqa: PLC0415
+
+    from custom_components.gmx_mail_mcp.audit import SendCounter  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.mcp.protocol import McpServer  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.mcp.registry import ToolContext, build_tools  # noqa: PLC0415
+
+    marker = uuid.uuid4().hex[:8]
+    original = EmailMessage()
+    original["From"] = "Test <test@example.test>"
+    original["To"] = USER
+    original["Subject"] = f"m5-orig-{marker}"
+    original["Message-ID"] = f"<orig-{marker}@example.test>"
+    original.set_content("Ursprünglicher Text\n")
+    original.add_attachment(b"%PDF-1.4 Anhang", maintype="application", subtype="pdf", filename="beleg.pdf")
+    await asyncio.to_thread(mailer.append, folder, original.as_bytes())
+    validity = mailer.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+    mailer.select_folder(folder, readonly=True)
+    orig_ref = {"folder": folder, "uid": sorted(mailer.search(["ALL"]))[-1], "uidvalidity": validity}
+    mailer.unselect_folder()
+
+    options = {"send_mode": "allowlist", "allowlist": ["test@example.test"], "sender_name": "Haus Test"}
+    worker = ImapWorker(SETTINGS, executor=_executor, ssl_context_factory=_context, limiter=ConnectionLimiter())
+    context = ToolContext(
+        worker=worker,
+        options=lambda: options,
+        executor=_executor,
+        account="t",
+        email=USER,
+        smtp=SmtpSettings(host=HOST, port=SUBMISSION_PORT, security=Security.STARTTLS, username=USER, password=PASSWORD),
+        tls_context=_context,
+        sends=SendCounter(),
+    )
+    tools = build_tools(context)
+    server = McpServer(name="t", version="1", tools=lambda: tools)
+
+    async def call(name: str, arguments: dict[str, Any], *, error: bool = False) -> dict[str, Any]:
+        outcome = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
+        )
+        assert outcome.body is not None
+        result = outcome.body["result"]
+        payload: dict[str, Any] = json.loads(result["content"][0]["text"])
+        assert result["isError"] is error, payload
+        return payload if error else payload["data"]
+
+    async def send(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        preview = await call(name, arguments)
+        assert preview["sent"] is False
+        done = await call(name, {**arguments, "confirm_token": preview["confirm_token"]})
+        assert done["sent"] is True and done["sent_copy"] == "appended" and done["confirmation"] == "code"
+        return done
+
+    content = b"Notiz " + marker.encode()
+    try:
+        refused = await call("gmx_send_message", {"to": ["fremd@example.org"], "subject": marker}, error=True)
+        assert refused["error"] == "recipient_not_allowed"
+        await send(
+            "gmx_send_message",
+            {
+                "to": ["Test <test@example.test>"],
+                "bcc": ["test@example.test"],
+                "subject": f"m5-neu-{marker}",
+                "body_text": "Grüße",
+                "attachments": [
+                    {"filename": "notiz.txt", "content_base64": b64encode(content).decode(), "sha256": hashlib.sha256(content).hexdigest()}
+                ],
+            },
+        )
+        await send("gmx_reply", {"ref": orig_ref, "body_text": "Danke"})
+        await send("gmx_forward", {"ref": orig_ref, "to": ["test@example.test"], "comment": "Zur Info"})
+        draft = await call("gmx_save_draft", {"to": ["test@example.test"], "subject": f"m5-entwurf-{marker}", "body_text": "Entwurf"})
+        await send("gmx_send_draft", {"ref": draft["ref"]})
+
+        assert draft["ref"]["uid"] not in _subjects(mailer, "Entwürfe")  # the sent draft is gone
+        mailer.select_folder(folder, readonly=True)
+        assert b"\\Answered" in mailer.get_flags([orig_ref["uid"]])[orig_ref["uid"]]
+        mailer.unselect_folder()
+        copies = {s for s in _subjects(mailer, "Gesendet").values() if marker in s}
+        assert copies == {f"m5-neu-{marker}", f"Re: m5-orig-{marker}", f"Fwd: m5-orig-{marker}", f"m5-entwurf-{marker}"}
+
+        delivered = await asyncio.to_thread(_greenmail_take, marker)
+        assert set(delivered) == copies
+        new = email.message_from_bytes(delivered[f"m5-neu-{marker}"], policy=email.policy.default)
+        assert new["Bcc"] is None and "Haus Test" in str(new["From"])
+        assert [p.get_filename() for p in new.iter_attachments()] == ["notiz.txt"]
+        forwarded = email.message_from_bytes(delivered[f"Fwd: m5-orig-{marker}"], policy=email.policy.default)
+        assert [p.get_filename() for p in forwarded.iter_attachments()] == ["beleg.pdf"]
+        reply = email.message_from_bytes(delivered[f"Re: m5-orig-{marker}"], policy=email.policy.default)
+        assert str(reply["In-Reply-To"]) == f"<orig-{marker}@example.test>"
+
+        assert context.sends.sent_today == 4
+        entries = [e for e in reversed(context.audit.latest(20)) if e["tool"] != "gmx_save_draft"]
+        assert [(e["tool"], e["outcome"]) for e in entries] == [
+            ("gmx_send_message", "error"),
+            ("gmx_send_message", "preview"),
+            ("gmx_send_message", "ok"),
+            ("gmx_reply", "preview"),
+            ("gmx_reply", "ok"),
+            ("gmx_forward", "preview"),
+            ("gmx_forward", "ok"),
+            ("gmx_send_draft", "preview"),
+            ("gmx_send_draft", "ok"),
+        ]
+        assert {d for e in entries for d in e.get("recipient_domains", [])} == {"example.org", "example.test"}
+        dump = json.dumps(context.audit.snapshot())
+        assert marker not in dump and "test@" not in dump and "fremd@" not in dump
+    finally:
+        await worker.async_shutdown()
+        own = [uid for uid, subject in _subjects(mailer, "Gesendet").items() if marker in subject]
+        if own:
+            mailer.select_folder("Gesendet")
+            mailer.add_flags(own, [b"\\Deleted"])
+            mailer.uid_expunge(own)
+            mailer.unselect_folder()
+        leftover = [uid for uid, subject in _subjects(mailer, "Entwürfe").items() if marker in subject]
+        if leftover:
+            mailer.select_folder("Entwürfe")
+            mailer.add_flags(leftover, [b"\\Deleted"])
+            mailer.uid_expunge(leftover)
+            mailer.unselect_folder()
+
+
 def _kick() -> bool:
     """Disconnect all sessions of the test user server-side (like GMX's '* BYE timeout')."""
     root = Path(__file__).resolve().parent.parent.parent

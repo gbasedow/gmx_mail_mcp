@@ -1,9 +1,10 @@
-"""Audit log and delete counter (D39, D41, D42) - free of Home Assistant imports.
+"""Audit log, delete counter and send counter (D39, D41, D42, D48, D55) - free of Home Assistant imports.
 
 The audit log records every call of a tool of level O, D or S (also previews, refusals, errors and cancellations), never
 mail content, subjects, addresses or file names: time, tool, level, outcome, count, folder names, the HA user id and a
-short non-reversible fingerprint of the parameters. Persistence (``Store``) is wired up in ``storage.py``; here the
-objects only call ``on_change`` when something must be saved.
+short non-reversible fingerprint of the parameters; for sending also the recipients' domains (never the local part, D55).
+Persistence (``Store``) is wired up in ``storage.py``; here the objects only call ``on_change`` when something must be
+saved.
 """
 
 from __future__ import annotations
@@ -21,7 +22,10 @@ from .const import DEFAULT_AUDIT_RETENTION_DAYS
 MAX_ENTRIES: Final = 5000
 MAX_FOLDERS_PER_ENTRY: Final = 20
 MAX_FOLDER_CHARS: Final = 100
+MAX_DOMAINS_PER_ENTRY: Final = 20
+MAX_DOMAIN_CHARS: Final = 255
 _SECONDS_PER_DAY: Final = 86_400
+_SECONDS_PER_HOUR: Final = 3_600
 
 # Arguments that are never part of the fingerprint: a confirmation code differs between preview and execution.
 _NOT_FINGERPRINTED: Final = frozenset({"confirm_token"})
@@ -50,6 +54,14 @@ def folders_of(arguments: Mapping[str, Any]) -> list[str]:
             names.append(value.get("folder"))
     names.extend(arguments.get(key) for key in ("folder", "target", "parent"))
     return [name for name in names if isinstance(name, str) and name]
+
+
+def _domain_only(value: Any) -> str:
+    """The domain of an address or domain, lower case, without control characters; empty if there is none."""
+    if not isinstance(value, str):
+        return ""
+    domain = value.rpartition("@")[2].strip().lower()
+    return clean_inline(domain, MAX_DOMAIN_CHARS) if domain else ""
 
 
 class AuditLog:
@@ -89,8 +101,12 @@ class AuditLog:
         user: str | None = None,
         error: str | None = None,
         confirmation: str | None = None,
+        recipient_domains: Iterable[str] = (),
     ) -> dict[str, Any]:
-        """Store one entry. ``arguments`` only contribute folder names and the fingerprint, never their values."""
+        """Store one entry. ``arguments`` only contribute folder names and the fingerprint, never their values.
+
+        ``recipient_domains`` are reduced to the part after the last ``@`` here as well, so an address can never be stored.
+        """
         names = sorted({clean_inline(name, MAX_FOLDER_CHARS) for name in (*folders_of(arguments), *folders) if name})
         entry: dict[str, Any] = {
             "time": _iso(self._clock()),
@@ -106,6 +122,9 @@ class AuditLog:
             entry["error"] = error
         if confirmation:
             entry["confirmation"] = confirmation
+        domains = sorted({domain for item in recipient_domains if (domain := _domain_only(item))})
+        if domains:
+            entry["recipient_domains"] = domains[:MAX_DOMAINS_PER_ENTRY]
         self._entries.append(entry)
         self._prune()
         self.on_change()
@@ -174,3 +193,77 @@ class DeleteCounter:
         """Data to persist."""
         self._roll()
         return {"date": self._date, "deleted": self._count}
+
+
+class SendCounter:
+    """Messages sent on the current local day and recipients in the last hour (D48); survives restarts via snapshots.
+
+    A message whose outcome is unknown (connection lost during DATA) counts as sent: it may have gone out.
+    """
+
+    def __init__(
+        self,
+        *,
+        today: Callable[[], str] = lambda: date.today().isoformat(),
+        clock: Callable[[], float] = time.time,
+        on_change: Callable[[], None] = lambda: None,
+        stored: Mapping[str, Any] | None = None,
+    ) -> None:
+        """``stored`` is a snapshot; a count of an earlier day and recipients older than an hour are dropped."""
+        self._today = today
+        self._clock = clock
+        self.on_change = on_change
+        self._date = today()
+        self._sent = 0
+        self._recent: list[tuple[float, int]] = []
+        if stored:
+            if stored.get("date") == self._date:
+                try:
+                    self._sent = max(0, int(stored.get("sent", 0)))
+                except TypeError, ValueError:
+                    self._sent = 0
+            recent = stored.get("recipients")
+            if isinstance(recent, list):
+                for item in recent:
+                    try:
+                        stamp, count = float(item[0]), int(item[1])
+                    except TypeError, ValueError, IndexError, KeyError:
+                        continue
+                    if count > 0:
+                        self._recent.append((stamp, count))
+        self._prune()
+
+    def _roll(self) -> None:
+        today = self._today()
+        if today != self._date:
+            self._date, self._sent = today, 0
+
+    def _prune(self) -> None:
+        cutoff = self._clock() - _SECONDS_PER_HOUR
+        self._recent = [(stamp, count) for stamp, count in self._recent if stamp > cutoff]
+
+    @property
+    def sent_today(self) -> int:
+        """Messages sent today."""
+        self._roll()
+        return self._sent
+
+    @property
+    def recipients_last_hour(self) -> int:
+        """Recipients of the messages sent in the last 60 minutes (sliding window)."""
+        self._prune()
+        return sum(count for _stamp, count in self._recent)
+
+    def add(self, recipients: int) -> None:
+        """Count one message to ``recipients`` recipients."""
+        self._roll()
+        self._prune()
+        self._sent += 1
+        self._recent.append((self._clock(), max(0, recipients)))
+        self.on_change()
+
+    def snapshot(self) -> dict[str, Any]:
+        """Data to persist."""
+        self._roll()
+        self._prune()
+        return {"date": self._date, "sent": self._sent, "recipients": [[stamp, count] for stamp, count in self._recent]}

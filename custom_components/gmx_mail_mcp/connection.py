@@ -25,6 +25,7 @@ from .const import (
     DOMAIN,
     ISSUE_IMAP_POSSIBLY_DISABLED,
     ISSUE_NEW_TOOLS,
+    ISSUE_SMTP_AUTH_FAILED,
     Security,
 )
 from .mcp.registry import new_tool_names
@@ -82,6 +83,32 @@ def async_create_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
 def async_delete_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove the issue after a successful login."""
     ir.async_delete_issue(hass, DOMAIN, auth_issue_id(entry))
+
+
+def smtp_auth_issue_id(entry: ConfigEntry) -> str:
+    """Return the repair issue id for a rejected SMTP login (M5)."""
+    return f"{ISSUE_SMTP_AUTH_FAILED}_{entry.entry_id}"
+
+
+@callback
+def async_create_smtp_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """GMX rejected the SMTP login while sending: app password revoked or changed."""
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        smtp_auth_issue_id(entry),
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.ERROR,
+        translation_key=ISSUE_SMTP_AUTH_FAILED,
+        translation_placeholders={"account": entry.title},
+    )
+
+
+@callback
+def async_delete_smtp_auth_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove the issue when the entry is set up again (after re-authentication)."""
+    ir.async_delete_issue(hass, DOMAIN, smtp_auth_issue_id(entry))
 
 
 def new_tools_issue_id(entry: ConfigEntry) -> str:

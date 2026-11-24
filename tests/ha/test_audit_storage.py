@@ -110,5 +110,13 @@ async def test_only_confirmable_tools_are_offered(hass: HomeAssistant, add_entry
     result = dict(await hass.config_entries.options.async_init(entry.entry_id))
     key = next(k for k in result["data_schema"].schema if k == CONF_TOOLS_WITHOUT_CONFIRMATION)
     selector = result["data_schema"].schema[key]
-    assert selector.config["options"] == ["gmx_delete_permanently", "gmx_delete_folder"]
+    assert selector.config["options"] == [
+        "gmx_delete_permanently",
+        "gmx_delete_folder",
+        # M5 (D45): the sending tools can be chosen as well.
+        "gmx_send_message",
+        "gmx_reply",
+        "gmx_forward",
+        "gmx_send_draft",
+    ]
     assert key.description["suggested_value"] == []

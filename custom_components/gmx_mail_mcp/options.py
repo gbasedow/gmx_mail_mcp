@@ -72,9 +72,9 @@ OPTION_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
 # (minimum, maximum); maximum None = no upper bound.
 INT_RANGES: Final[dict[str, tuple[int, int | None]]] = {
     CONF_MAX_RECIPIENTS: (1, None),
-    CONF_MAX_SEND_PER_DAY: (1, None),
+    CONF_MAX_SEND_PER_DAY: (0, None),  # 0 = no daily limit (D48)
     CONF_MAX_DELETE_PER_DAY: (0, None),  # 0 = no daily limit (D39)
-    CONF_MAX_RECIPIENTS_PER_HOUR: (1, None),
+    CONF_MAX_RECIPIENTS_PER_HOUR: (0, None),  # 0 = no hourly limit (D48)
     CONF_MAX_MESSAGE_SIZE_MB: (1, MAX_MESSAGE_SIZE_MB),
     CONF_POLL_INTERVAL: (POLL_INTERVAL_MIN_S, POLL_INTERVAL_MAX_S),
     CONF_IDLE_RENEW_MINUTES: (IDLE_RENEW_MIN_MINUTES, IDLE_RENEW_MAX_MINUTES),
@@ -124,20 +124,37 @@ def normalize_allowlist(entries: Any) -> list[str]:
 
 
 def is_valid_allowlist_entry(entry: str) -> bool:
-    """Return whether ``entry`` is ``*``, an exact address or ``*@domain``."""
-    return entry == ALLOWLIST_WILDCARD or bool(_ADDRESS_RE.match(entry) or _DOMAIN_WILDCARD_RE.match(entry))
+    """Return whether ``entry`` is an exact address or ``*@domain``; ``*`` is not an entry ("any address" is a mode, D46)."""
+    return bool(_ADDRESS_RE.match(entry) or _DOMAIN_WILDCARD_RE.match(entry))
 
 
 def _send_mode_error(send_mode: str, allowlist: list[str]) -> str | None:
     if send_mode not in {m.value for m in SendMode}:
         return "invalid_send_mode"
+    if ALLOWLIST_WILDCARD in allowlist:
+        return "wildcard_not_allowed"
     if any(not is_valid_allowlist_entry(e) for e in allowlist):
         return "invalid_allowlist_entry"
-    if ALLOWLIST_WILDCARD in allowlist and send_mode != SendMode.ANY:
-        return "wildcard_requires_any"
-    if send_mode == SendMode.ANY and ALLOWLIST_WILDCARD not in allowlist:
-        return "any_requires_wildcard"  # "any" must be confirmed by explicitly entering "*" (SPEC section 5, measure 2)
     return None
+
+
+# Send modes offered in the options flow (D46); ``off`` stays readable for old data but is not offered.
+FORM_SEND_MODES: Final = (SendMode.ALLOWLIST.value, SendMode.ANY.value)
+
+
+def check_send_options(send_mode: Any, allowlist: Any, sender_name: Any) -> tuple[dict[str, Any], dict[str, str]]:
+    """Normalise the sending fields of the options form; errors map the field to a translation key (D46, D52)."""
+    errors: dict[str, str] = {}
+    mode = str(send_mode or SendMode.ALLOWLIST.value)
+    if mode not in FORM_SEND_MODES:
+        errors[CONF_SEND_MODE] = "invalid_send_mode"
+    entries = normalize_allowlist(allowlist)
+    if error := _send_mode_error(mode if mode in FORM_SEND_MODES else SendMode.ALLOWLIST.value, entries):
+        errors[CONF_ALLOWLIST] = error
+    name, valid = normalize_sender_name(sender_name)
+    if not valid:
+        errors[CONF_SENDER_NAME] = "invalid_sender_name"
+    return {CONF_SEND_MODE: mode, CONF_ALLOWLIST: entries, CONF_SENDER_NAME: name}, errors
 
 
 def normalize_sender_name(value: Any) -> tuple[str, bool]:

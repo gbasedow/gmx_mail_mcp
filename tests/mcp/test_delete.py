@@ -108,7 +108,7 @@ def test_delete_tools_are_level_d_and_off_by_default() -> None:
         assert specs[name].level is Permission.DELETE
         assert name not in default_enabled_tools()
     assert specs["gmx_get_audit_log"].level is Permission.READ
-    assert CONFIRMABLE_TOOLS == ("gmx_delete_permanently", "gmx_delete_folder")
+    assert CONFIRMABLE_TOOLS[:2] == ("gmx_delete_permanently", "gmx_delete_folder")
 
 
 def test_delete_tools_are_marked_destructive(context: ToolContext) -> None:
