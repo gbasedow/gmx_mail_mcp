@@ -282,3 +282,18 @@ async def test_token_never_logged(
     await _post(client, entry.entry_id, rpc("ping"), bearer(foreign))
     assert token not in caplog.text
     assert foreign not in caplog.text
+
+
+async def test_401_points_to_ha_oauth_metadata(client: TestClient, entry: MockConfigEntry) -> None:
+    """HA adds an RFC 9728 challenge to the 401; OAuth clients such as claude.ai discover HA itself as authorization server."""
+    resp = await _post(client, entry.entry_id, rpc("ping"), MCP_HEADERS)
+    assert resp.status == 401
+    challenge = resp.headers.get("WWW-Authenticate", "")
+    assert challenge.startswith("Bearer resource_metadata=")
+    assert challenge.endswith('/.well-known/oauth-protected-resource"')
+    metadata = await client.get("/.well-known/oauth-protected-resource")
+    assert metadata.status == 200
+    authorization_server = (await metadata.json())["authorization_servers"][0]
+    oauth = await (await client.get("/.well-known/oauth-authorization-server")).json()
+    assert oauth["authorization_endpoint"] == f"{authorization_server}/auth/authorize"
+    assert oauth["client_id_metadata_document_supported"] is True

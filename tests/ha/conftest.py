@@ -73,6 +73,7 @@ async def client(hass: HomeAssistant, hass_client_no_auth: Callable[[], Awaitabl
     # The test client freezes the aiohttp router; the integration must register its view first.
     # (A running HA keeps its router unfrozen so integrations set up later work; checked end to end, see docs/M0-SPIKE.md.)
     assert await async_setup_component(hass, "http", {})
+    assert await async_setup_component(hass, "auth", {})  # .well-known OAuth documents, as in a real HA
     assert await async_setup_component(hass, DOMAIN, {})
     return await hass_client_no_auth()
 
