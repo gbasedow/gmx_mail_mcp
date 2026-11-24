@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from .client.imap import ConnectionLimiter, ImapWorker
 from .client.smtp import SmtpSettings
 from .mcp.protocol import McpServer
+from .storage import Ledgers
 
 
 @dataclass(slots=True)
@@ -20,6 +21,7 @@ class RuntimeData:
     worker: ImapWorker
     limiter: ConnectionLimiter
     smtp_settings: SmtpSettings  # used from M5 (sending)
+    ledgers: Ledgers  # audit log and delete counter (M4)
 
 
 type GmxMailMcpConfigEntry = ConfigEntry[RuntimeData]

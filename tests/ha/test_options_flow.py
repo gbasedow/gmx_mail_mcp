@@ -18,10 +18,14 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUs
 from custom_components.gmx_mail_mcp.connect_info import TOKEN_PLACEHOLDER, URL_PLACEHOLDER, claude_code_command, connection_url
 from custom_components.gmx_mail_mcp.const import (
     CONF_ALLOW_HTML_OUTPUT,
+    CONF_ALLOW_PERMANENT_DELETE,
+    CONF_AUDIT_RETENTION_DAYS,
     CONF_ENABLED_TOOLS,
     CONF_KNOWN_TOOLS,
     CONF_MAX_ATTACHMENT_MB,
+    CONF_MAX_DELETE_PER_DAY,
     CONF_MAX_UPLOAD_MB,
+    CONF_TOOLS_WITHOUT_CONFIRMATION,
     DOMAIN,
 )
 from custom_components.gmx_mail_mcp.http import endpoint_path
@@ -90,6 +94,11 @@ async def test_switches_apply_without_reload(
         CONF_MAX_ATTACHMENT_MB: 10,
         CONF_MAX_UPLOAD_MB: 10,
         CONF_ALLOW_HTML_OUTPUT: False,
+        # M4 (D39, D42, D45): defaults - permanent deletion off, no daily limit, confirmation everywhere, 90 days audit.
+        CONF_ALLOW_PERMANENT_DELETE: False,
+        CONF_MAX_DELETE_PER_DAY: 0,
+        CONF_TOOLS_WITHOUT_CONFIRMATION: [],
+        CONF_AUDIT_RETENTION_DAYS: 90,
     }
     assert entry.runtime_data.worker is worker  # no reload, connection kept
     assert await listed() == []

@@ -31,6 +31,7 @@ from .http import McpView
 from .mcp.protocol import McpServer
 from .mcp.registry import ToolContext, build_tools, enabled_tools
 from .runtime import GmxMailMcpConfigEntry, RuntimeData
+from .storage import async_load_ledgers, async_remove_ledgers
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -81,6 +82,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
     entry.async_on_unload(async_track_time_interval(hass, _close_if_idle, timedelta(seconds=IDLE_CHECK_INTERVAL_S)))
 
     integration = await async_get_integration(hass, DOMAIN)
+    ledgers = await async_load_ledgers(hass, entry.entry_id, lambda: entry.options)
     tools = build_tools(
         ToolContext(
             worker=worker,
@@ -88,6 +90,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
             executor=hass.async_add_executor_job,
             account=entry.title,
             email=entry.data[CONF_EMAIL],
+            audit=ledgers.audit,
+            deletes=ledgers.deletes,
         )
     )
     server = McpServer(
@@ -109,6 +113,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
         worker=worker,
         limiter=limiter,
         smtp_settings=smtp_settings_from_data(entry.data),
+        ledgers=ledgers,
     )
     return True
 
@@ -116,4 +121,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
 async def async_unload_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> bool:
     """Log out; the endpoint answers 404 from now on (the view checks the entry state)."""
     await entry.runtime_data.worker.async_shutdown()
+    await entry.runtime_data.ledgers.async_flush()
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> None:
+    """Delete the audit log and the delete counter of a removed account (D42)."""
+    await async_remove_ledgers(hass, entry.entry_id)

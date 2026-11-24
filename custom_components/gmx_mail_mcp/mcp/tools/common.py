@@ -22,6 +22,7 @@ from ...client.errors import (
     GmxBackoffError,
     GmxConnectionError,
     GmxConnectionLimitError,
+    GmxDeleteRuleError,
     GmxFolderExistsError,
     GmxFolderNotFoundError,
     GmxInvalidFolderNameError,
@@ -29,6 +30,7 @@ from ...client.errors import (
     GmxMessageNotFoundError,
     GmxMessageTooLargeError,
     GmxPartNotFoundError,
+    GmxProtectedFolderDeleteError,
     GmxProtectedFolderError,
     GmxProtectedTargetError,
     GmxSearchRejectedError,
@@ -195,7 +197,14 @@ _ERRORS: tuple[tuple[type[Exception], str, str], ...] = (
     (
         GmxProtectedTargetError,
         "protected_target",
-        "Moving or copying into the trash is not allowed here; deleting is done with the separate trash tool.",
+        "Moving or copying into the trash is not allowed here; use gmx_trash (if switched on).",
+    ),
+    (GmxProtectedFolderDeleteError, "protected_folder", "INBOX and special folders cannot be deleted."),
+    (
+        GmxDeleteRuleError,
+        "delete_not_allowed",
+        "Not allowed for these messages or this folder (see reason): permanent deletion only in trash or spam, "
+        "trash only for mails outside the trash, folders only when empty and without subfolders.",
     ),
     (GmxProtectedFolderError, "protected_folder", "INBOX and special folders cannot be renamed or get subfolders."),
     (GmxFolderExistsError, "folder_exists", "A folder with this name already exists."),
@@ -208,12 +217,13 @@ _ERRORS: tuple[tuple[type[Exception], str, str], ...] = (
     (GmxMessageTooLargeError, "message_too_large", "The message is larger than the mail server accepts."),
 )
 # Errors whose ``reason`` is more precise than the code above (e.g. same_folder, not_in_junk, keywords_not_supported).
-_REASON_ERRORS: Final = (GmxInvalidFolderNameError, GmxWrongFolderError, GmxUnsupportedError)
+_REASON_ERRORS: Final = (GmxInvalidFolderNameError, GmxWrongFolderError, GmxUnsupportedError, GmxDeleteRuleError)
 
 
 def error_result(code: str, message: str, **details: Any) -> ToolResult:
     """Tool error the model can read (``isError``)."""
-    return ToolResult.text(json.dumps({"error": code, "message": message, **details}, ensure_ascii=False), is_error=True)
+    text = json.dumps({"error": code, "message": message, **details}, ensure_ascii=False)
+    return ToolResult(content=[{"type": "text", "text": text}], is_error=True, audit={"outcome": "error", "error": code})
 
 
 def map_client_error(err: Exception) -> ToolResult:
@@ -250,6 +260,21 @@ def envelope(account: str, action: str, data: Mapping[str, Any], **kwargs: Any) 
     return build_envelope(account=account, action=action, data=data, **kwargs)
 
 
-def json_result(payload: Mapping[str, Any]) -> ToolResult:
-    """Serialise an envelope as the text block of a tool result."""
-    return ToolResult.text(json.dumps(payload, ensure_ascii=False, default=str))
+def audit_facts(data: Mapping[str, Any]) -> dict[str, Any]:
+    """Count and folder names of a result's ``data`` for the audit log (never content)."""
+    facts: dict[str, Any] = {}
+    if isinstance(data.get("count"), int) and not isinstance(data.get("count"), bool):
+        facts["count"] = data["count"]
+    folders = [f for f in data.get("folders") or () if isinstance(f, str)]
+    folders += [data[key] for key in ("path", "old_path", "trash_folder", "deleted_folder") if isinstance(data.get(key), str)]
+    folders += [r["folder"] for r in data.get("new_refs") or () if isinstance(r, Mapping) and isinstance(r.get("folder"), str)]
+    if folders:
+        facts["folders"] = folders
+    return facts
+
+
+def json_result(payload: Mapping[str, Any], *, audit: Mapping[str, Any] | None = None) -> ToolResult:
+    """Serialise an envelope as the text block of a tool result; ``audit`` adds to the facts taken from ``data``."""
+    data = payload.get("data")
+    facts = {"outcome": "ok", **(audit_facts(data) if isinstance(data, Mapping) else {}), **(audit or {})}
+    return ToolResult(content=[{"type": "text", "text": json.dumps(payload, ensure_ascii=False, default=str)}], audit=facts)

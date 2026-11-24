@@ -34,8 +34,12 @@ from .client.smtp import check_smtp_login
 from .connect_info import claude_code_command, connection_url
 from .connection import create_tls_context, imap_settings_from_data, smtp_settings_from_data
 from .const import (
+    AUDIT_RETENTION_MAX_DAYS,
+    AUDIT_RETENTION_MIN_DAYS,
     CONF_ALLOW_HTML_OUTPUT,
+    CONF_ALLOW_PERMANENT_DELETE,
     CONF_ALLOWED_USER,
+    CONF_AUDIT_RETENTION_DAYS,
     CONF_EMAIL,
     CONF_ENABLED_TOOLS,
     CONF_IMAP_HOST,
@@ -43,11 +47,14 @@ from .const import (
     CONF_IMAP_SECURITY,
     CONF_KNOWN_TOOLS,
     CONF_MAX_ATTACHMENT_MB,
+    CONF_MAX_DELETE_PER_DAY,
     CONF_MAX_UPLOAD_MB,
     CONF_PASSWORD,
     CONF_SMTP_HOST,
     CONF_SMTP_PORT,
     CONF_SMTP_SECURITY,
+    CONF_TOOLS_WITHOUT_CONFIRMATION,
+    DEFAULT_AUDIT_RETENTION_DAYS,
     DEFAULT_IMAP_HOST,
     DEFAULT_IMAP_PORT,
     DEFAULT_IMAP_SECURITY,
@@ -62,7 +69,7 @@ from .const import (
     SECTION_SERVER,
     Security,
 )
-from .mcp.registry import TOOL_SPECS, enabled_tool_names, new_tool_names
+from .mcp.registry import CONFIRMABLE_TOOLS, TOOL_SPECS, enabled_tool_names, new_tool_names
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -250,8 +257,18 @@ class GmxMailMcpConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
+def _int_option(value: Any, default: int, low: int, high: int | None) -> int:
+    try:
+        number = int(value)
+    except TypeError, ValueError:
+        number = default
+    number = max(low, number)
+    return number if high is None else min(high, number)
+
+
 class GmxMailMcpOptionsFlow(OptionsFlow):
-    """Connection URL (D22), tool switches (D12), new tools (D31), size limits (D14, D17), HTML output (D29).
+    """Connection URL (D22), tool switches (D12), new tools (D31), size limits (D14, D17), HTML output (D29), deleting
+    (permanent deletion, daily limit D39, tools without confirmation D45) and audit retention (D42).
 
     All take effect at once. Saving records the tools of this version (``known_tools``), so tools of a later update can
     be shown as new.
@@ -266,6 +283,7 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
             enabled = [spec.name for spec in TOOL_SPECS if spec.name in chosen]
             limit = min(MAX_ATTACHMENT_MB, max(1, int(user_input.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB))))
             upload = min(MAX_UPLOAD_MB, max(1, int(user_input.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB))))
+            skipped = set(user_input.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())
             return self.async_create_entry(
                 data={
                     **options,
@@ -274,6 +292,16 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
                     CONF_MAX_ATTACHMENT_MB: limit,
                     CONF_MAX_UPLOAD_MB: upload,
                     CONF_ALLOW_HTML_OUTPUT: bool(user_input.get(CONF_ALLOW_HTML_OUTPUT, False)),
+                    CONF_ALLOW_PERMANENT_DELETE: bool(user_input.get(CONF_ALLOW_PERMANENT_DELETE, False)),
+                    CONF_MAX_DELETE_PER_DAY: _int_option(user_input.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
+                    # Only tools with a confirmation step can be chosen (D45).
+                    CONF_TOOLS_WITHOUT_CONFIRMATION: [name for name in CONFIRMABLE_TOOLS if name in skipped],
+                    CONF_AUDIT_RETENTION_DAYS: _int_option(
+                        user_input.get(CONF_AUDIT_RETENTION_DAYS),
+                        DEFAULT_AUDIT_RETENTION_DAYS,
+                        AUDIT_RETENTION_MIN_DAYS,
+                        AUDIT_RETENTION_MAX_DAYS,
+                    ),
                 }
             )
 
@@ -301,6 +329,31 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
                     probatio.Coerce(int),
                 ),
                 probatio.Required(CONF_ALLOW_HTML_OUTPUT, default=False): BooleanSelector(),
+                probatio.Required(CONF_ALLOW_PERMANENT_DELETE, default=False): BooleanSelector(),
+                probatio.Required(CONF_MAX_DELETE_PER_DAY, default=0): probatio.All(
+                    NumberSelector(NumberSelectorConfig(min=0, step=1, mode=NumberSelectorMode.BOX)),
+                    probatio.Coerce(int),
+                ),
+                probatio.Optional(CONF_TOOLS_WITHOUT_CONFIRMATION): SelectSelector(
+                    SelectSelectorConfig(
+                        options=list(CONFIRMABLE_TOOLS),
+                        multiple=True,
+                        mode=SelectSelectorMode.LIST,
+                        translation_key=CONF_TOOLS_WITHOUT_CONFIRMATION,
+                    )
+                ),
+                probatio.Required(CONF_AUDIT_RETENTION_DAYS, default=DEFAULT_AUDIT_RETENTION_DAYS): probatio.All(
+                    NumberSelector(
+                        NumberSelectorConfig(
+                            min=AUDIT_RETENTION_MIN_DAYS,
+                            max=AUDIT_RETENTION_MAX_DAYS,
+                            step=1,
+                            mode=NumberSelectorMode.BOX,
+                            unit_of_measurement="d",
+                        )
+                    ),
+                    probatio.Coerce(int),
+                ),
             }
         )
         suggested = {
@@ -308,6 +361,12 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
             CONF_MAX_ATTACHMENT_MB: int(options.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB)),
             CONF_MAX_UPLOAD_MB: int(options.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB)),
             CONF_ALLOW_HTML_OUTPUT: bool(options.get(CONF_ALLOW_HTML_OUTPUT, False)),
+            CONF_ALLOW_PERMANENT_DELETE: bool(options.get(CONF_ALLOW_PERMANENT_DELETE, False)),
+            CONF_MAX_DELETE_PER_DAY: _int_option(options.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
+            CONF_TOOLS_WITHOUT_CONFIRMATION: [n for n in CONFIRMABLE_TOOLS if n in (options.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())],
+            CONF_AUDIT_RETENTION_DAYS: _int_option(
+                options.get(CONF_AUDIT_RETENTION_DAYS), DEFAULT_AUDIT_RETENTION_DAYS, AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS
+            ),
         }
         return self.async_show_form(
             step_id="init",

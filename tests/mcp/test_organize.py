@@ -203,10 +203,17 @@ async def test_mark_spam_and_back(server: McpServer, imap: FakeImapServer) -> No
 
 
 async def test_folder_tools(server: McpServer, imap: FakeImapServer) -> None:
+    # Like GMX (GMX-NOTES row 45): CREATE does not subscribe; the tool does (D44).
+    imap.subscribed = {"INBOX", "Archiv", "Gesendet", "Entwürfe", "Gelöscht", "Spamverdacht"}
     created = await call(server, "gmx_create_folder", {"name": "Rechnungen", "parent": "Archiv"})
-    assert created["data"]["data"] == {"path": "Archiv/Rechnungen"}
+    assert created["data"]["data"] == {"path": "Archiv/Rechnungen", "subscribed": True}
+    assert "Archiv/Rechnungen" in imap.subscribed
     renamed = await call(server, "gmx_rename_folder", {"folder": "Archiv/Rechnungen", "new_name": "Belege"})
     assert renamed["data"]["data"] == {"old_path": "Archiv/Rechnungen", "path": "Archiv/Belege"}
+    assert renamed["data"]["warnings"] == []
+    # The subscription moved with the folder; the old name is no longer subscribed.
+    assert "Archiv/Belege" in imap.subscribed
+    assert "Archiv/Rechnungen" not in imap.subscribed
     unsubscribed = await call(server, "gmx_subscribe_folder", {"folder": "Archiv/Belege", "subscribed": False})
     assert unsubscribed["data"]["data"] == {"path": "Archiv/Belege", "subscribed": False}
     listing = await call(server, "gmx_list_folders", {})

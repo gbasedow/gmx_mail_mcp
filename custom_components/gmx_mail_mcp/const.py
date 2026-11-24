@@ -113,6 +113,7 @@ CONF_FOLDER_JUNK: Final = "folder_junk"
 CONF_EVENT_INCLUDE_HEADERS: Final = "event_include_headers"
 CONF_SENT_COPY_MODE: Final = "sent_copy_mode"
 CONF_AUDIT_RETENTION_DAYS: Final = "audit_retention_days"
+CONF_TOOLS_WITHOUT_CONFIRMATION: Final = "tools_without_confirmation"  # D45
 CONF_ATTACHMENT_RETENTION_DAYS: Final = "attachment_retention_days"
 
 SECTION_PERMISSIONS: Final = "permissions_section"
@@ -133,7 +134,7 @@ FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
 # GMX does not publish its own sending limits (GMX-NOTES row 20); high values risk an account block.
 DEFAULT_MAX_RECIPIENTS: Final = 10
 DEFAULT_MAX_SEND_PER_DAY: Final = 20
-DEFAULT_MAX_DELETE_PER_DAY: Final = 200
+DEFAULT_MAX_DELETE_PER_DAY: Final = 0  # 0 = no daily limit (D39)
 # Third-party claim "max. 11 recipients per hour from a mail client" (GMX-NOTES row 20, unconfirmed) -> stay below it.
 DEFAULT_MAX_RECIPIENTS_PER_HOUR: Final = 10
 # Attachment limit of GMX FreeMail (GMX-NOTES row 19); ProMail 50 MB, TopMail 100 MB. SMTP SIZE allows ~135 MiB.
