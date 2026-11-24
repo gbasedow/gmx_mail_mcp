@@ -115,9 +115,9 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test bestanden – siehe `docs/M3.md`. |
-| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test offen – siehe `docs/M4.md`. |
-| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test offen – siehe `docs/M5.md`. |
-| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
+| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test bestanden (mit 0.0.7) – siehe `docs/M4.md`. |
+| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test bestanden – siehe `docs/M5.md`. |
+| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0 (erstes GitHub-Release, D57). **Stand 24.11.2026:** in Planung. |
 
 Je Meilenstein: Tests grün, Bericht, Freigabe des Nutzers.
 
