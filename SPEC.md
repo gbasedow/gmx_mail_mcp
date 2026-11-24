@@ -28,8 +28,8 @@ Home Assistant (http-Komponente: prüft das Token, setzt request["hass_user"])
 - **Token:** Der Endpunkt wird als `HomeAssistantView` mit `requires_auth = True` registriert. Home Assistant prüft das Bearer-Token selbst
   (Long-Lived Access Tokens eingeschlossen) und lehnt ungültige Aufrufe mit 401 ab, bevor Integrationscode läuft. Zusätzlich prüft `guard.py` den Benutzer
   (nur der im Config-Flow gewählte Benutzer, D9). Kein eigener Token-Speicher, kein Klartext-Token in der Konfiguration.
-- **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Ob das offizielle `mcp`-Python-SDK
-  oder eine schlanke eigene JSON-RPC-Schicht verwendet wird, ist **[offen 7]** (Abhängigkeitskonflikte mit HA vermeiden).
+- **Transport:** nur `POST`; `GET` liefert 405 (kein Server-Push nötig). Zustandslos (keine MCP-Sitzungen). Eigene schlanke JSON-RPC-Schicht,
+  kein `mcp`-Python-SDK (D20).
 - **Erreichbarkeit von außen:** Nabu Casa Remote UI oder eigene HTTPS-Adresse. **Risiko:** Der Connector in claude.ai erwartet nach bisherigem
   Kenntnisstand OAuth statt eines festen Bearer-Tokens; Claude Code und andere Clients können den Header setzen. Der Nutzer betreibt ha-mcp auf diese Weise (D8); trotzdem vor allem anderen per Spike prüfen (M0).
 - **Ressourcen:** `imapclient` im Executor mit einem `asyncio.Lock` je Entry (Vorlage `client/imap.py`), höchstens 2 IMAP-Verbindungen je Konto; ohne Sensoren keine dauerhafte IDLE-Verbindung (D15).
@@ -79,7 +79,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
   eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
 - Größenlimit je Abruf als Option (Voreinstellung 10 MB, D14; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
   Teilabruf per Offset/Länge als spätere Erweiterung.
-- Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python, Auswahl **[offen 9]**.
+- Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python; Auswahl der Bibliotheken in M2 (D10 nennt sie als offen).
 - Anhänge sind **untrusted**: kein Ausführen, keine Makros, Typ nach Inhalt prüfen, Dateiname bereinigen. Streaming per Teil-FETCH (`BODY.PEEK[n]<o.l>`),
   kein vollständiges Laden großer Nachrichten in den Speicher.
 - Senden mit Anhang (D17): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (konfigurierbar, Standard 10 MB),
@@ -103,7 +103,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 
 | M | Inhalt |
 |---|---|
-| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Entscheidet **[offen 4]** und **[offen 7]**. |
+| M0 | **Spike:** minimaler Endpunkt `ping`/`tools/list` mit `requires_auth`; Test mit Claude Code (Bearer) und mit claude.ai über Nabu Casa. Prüft D8 (Bearer-Weg); Nr. 7 ist mit D20 entschieden. |
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). |

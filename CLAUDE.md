@@ -15,7 +15,7 @@ Schutz auf zwei Ebenen (Vorgabe des Nutzers):
 1. **Jedes Tool einzeln ein- und ausschaltbar.**
 2. **Zugriff nur mit einem Long-Lived Access Token von Home Assistant** (Bearer-Token; HA prüft ihn selbst, siehe SPEC §2).
 
-Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ zum Verschicken = SMTP (Annahme, in `docs/OFFENE-PUNKTE.md` Nr. 1 zur Bestätigung).
+Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ zum Verschicken = SMTP (bestätigt, D19).
 
 ## 2. Herkunft und Stand
 
