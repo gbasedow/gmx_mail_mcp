@@ -46,7 +46,8 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `get_message` | R | Kopfzeilen, bereinigter Text, Anhangsliste; optional HTML (nur mit Option) |
 | `get_attachment` | R | **Ganze Datei** (siehe §5) |
 | `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) (D13) |
-| `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus, Audit-Log |
+| `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus mit Capabilities (M2), Audit-Log (M4) |
+| `get_thread`, `list_keywords` *(neu, M2)* | R | Gesprächsverlauf (ORDEREDSUBJECT), Schlagwörter eines Ordners (D28) |
 | `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel |
 | `create_folder`, `rename_folder` | O | Ordnerverwaltung |
 | `save_draft` | O | Entwurf per APPEND |
@@ -78,6 +79,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 - `get_attachment` hat den Parameter `mode`: `text` (extrahierter Text), `file` (ganze Datei) oder `both` (D10).
   Die Datei geht ungekürzt an das LLM, nicht nur Text. Rückgabeform nach MCP: Bilder als `image`-Content, andere Dateien als
   eingebettete Ressource (`resource` mit `blob`, base64) samt `mimeType`, Dateiname, Größe, SHA-256.
+- Umgesetzt in M2 (`docs/M2.md`): Typ nach Inhalt, Bilder als MCP-Bild, sonst eingebettete Ressource; Client-Grenzen siehe D26 (claude.ai ≈ 110 KB).
 - Größenlimit je Abruf als Option (Voreinstellung 10 MB, D14; GMX erlaubt bis ≈ 28 MiB je Nachricht, `APPENDLIMIT`). Größere Dateien: Fehler mit Größenangabe,
   Teilabruf per Offset/Länge als spätere Erweiterung.
 - Textextraktion (PDF, DOCX, XLSX, reine Textformate) ist Teil des Umfangs (D10); Abhängigkeiten nur reines Python; Auswahl der Bibliotheken in M2 (D10 nennt sie als offen).

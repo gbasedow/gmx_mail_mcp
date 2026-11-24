@@ -8,6 +8,7 @@ import smtplib
 import ssl
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from email.header import decode_header, make_header
 from types import SimpleNamespace
 from typing import Any
 
@@ -59,6 +60,7 @@ class FakeImapServer:
     # Optional hook: (folder, criteria, charset) -> UIDs; default: all non-deleted messages.
     search_hook: Any = None
     search_error: BaseException | None = None
+    thread_error: BaseException | None = None
     broken_partial_fetch: bool = False
     commands: list[tuple[Any, ...]] = field(default_factory=list)
     appended: list[bytes] = field(default_factory=list)
@@ -170,10 +172,12 @@ class FakeIMAPClient:
             raise IMAPClientError("select failed: NO [NONEXISTENT] Unknown folder")
         self.selected = folder
         self.readonly = readonly
+        keywords = sorted({f for m in box.messages.values() for f in m.flags if not f.startswith(b"\\")})
         return {
             b"EXISTS": len(box.messages),
             b"UIDVALIDITY": box.uidvalidity,
             b"READ-WRITE": not readonly,
+            b"FLAGS": (b"\\Answered", b"\\Flagged", b"\\Draft", b"\\Deleted", b"\\Seen", *keywords),
             b"PERMANENTFLAGS": self.server.permanent_flags,
         }
 
@@ -228,6 +232,25 @@ class FakeIMAPClient:
             uids = [uid for uid, m in self._box().messages.items() if b"\\Deleted" not in m.flags]
         box = self._box()
         return sorted(uids, key=lambda u: (box.messages[u].internaldate, u), reverse="REVERSE" in sort_criteria)
+
+    def thread(self, algorithm: str = "REFERENCES", criteria: Any = "ALL", charset: str = "UTF-8") -> tuple[Any, ...]:
+        """UID THREAD like ORDEREDSUBJECT: messages grouped by base subject (Re:/Fwd: removed), by date; first is the root."""
+        self._check_open()
+        self.server.commands.append(("thread", algorithm, list(criteria) if not isinstance(criteria, str) else criteria, charset))
+        if self.server.thread_error is not None:
+            raise self.server.thread_error
+        box = self._box()
+        groups: dict[str, list[int]] = {}
+        for uid, msg in sorted(box.messages.items(), key=lambda item: (item[1].internaldate, item[0])):
+            if b"\\Deleted" in msg.flags:
+                continue
+            match = re.search(rb"^Subject: (.*)$", msg.header, re.MULTILINE | re.IGNORECASE)
+            # Like a real server: decode RFC 2047 encoded words before comparing subjects.
+            subject = str(make_header(decode_header(match.group(1).decode()))).strip() if match else ""
+            base = re.sub(r"^((re|fwd?|aw|wg):\s*)+", "", subject, flags=re.IGNORECASE).lower()
+            groups.setdefault(base, []).append(uid)
+        # ORDEREDSUBJECT: (root child child ...); a lone message is (uid,).
+        return tuple((uids[0], *[(u,) for u in uids[1:]]) if len(uids) > 1 else (uids[0],) for uids in groups.values())
 
     def fetch(self, messages: Any, data: Any, modifiers: Any = None) -> dict[int, dict[bytes, Any]]:
         """UID FETCH of the items the integration uses."""

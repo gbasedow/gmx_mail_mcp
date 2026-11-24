@@ -43,6 +43,7 @@ def build(context: ToolContext) -> Tool:
                 "special_folders": sorted(role.value for role in folder_map.roles),
                 "append_limit_bytes": info.append_limit,
                 "missing_recommended_capabilities": info.missing_recommended,
+                "capabilities": sorted(info.capabilities),
             },
         }
         return ToolResult.text(json.dumps(status, ensure_ascii=False))
@@ -52,7 +53,7 @@ def build(context: ToolContext) -> Tool:
         title="GMX mailbox status",
         description=(
             "Checks the connection to the GMX mailbox and returns server facts (number of folders, recognised special "
-            "folders, upload limit). Takes no arguments; reads no mail."
+            "folders, upload limit, IMAP capabilities). Takes no arguments; reads no mail."
         ),
         input_schema={"type": "object", "properties": {}, "additionalProperties": False},
         level=Permission.READ,

@@ -80,7 +80,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
     entry.async_on_unload(async_track_time_interval(hass, _close_if_idle, timedelta(seconds=IDLE_CHECK_INTERVAL_S)))
 
     integration = await async_get_integration(hass, DOMAIN)
-    tools = build_tools(ToolContext(worker=worker))
+    tools = build_tools(
+        ToolContext(worker=worker, options=lambda: entry.options, executor=hass.async_add_executor_job, account=entry.title)
+    )
     server = McpServer(
         name=DOMAIN,
         version=str(integration.version),

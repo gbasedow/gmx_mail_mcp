@@ -82,10 +82,14 @@
         "title": "MCP-Zugriff und Tools",
         "description": "**Verbindungs-URL:** `{url}`\n\n**claude.ai:** Benutzerdefinierten Connector mit dieser URL anlegen und mit dem erlaubten Home-Assistant-Benutzer anmelden.\n\n**Claude Code:** Als erlaubter Benutzer ein langlebiges Zugriffstoken erstellen (Profil > Sicherheit), dann ausführen:\n\n`{claude_code}`\n\nNur die unten eingeschalteten Tools sind sichtbar und aufrufbar. Voreinstellung: nur lesende Tools.",
         "data": {
-          "enabled_tools": "Eingeschaltete Tools"
+          "enabled_tools": "Eingeschaltete Tools",
+          "max_attachment_mb": "Größenlimit für Anhänge und .eml",
+          "allow_html_output": "HTML-Ausgabe erlauben"
         },
         "data_description": {
-          "enabled_tools": "Änderungen wirken sofort, ohne Neustart."
+          "enabled_tools": "Änderungen wirken sofort, ohne Neustart.",
+          "max_attachment_mb": "Größte Datei, die gmx_get_attachment und gmx_get_raw_message liefern (1–10 MB). claude.ai nimmt je Antwort nur etwa 110 KB an, Claude Code bis zum Limit.",
+          "allow_html_output": "Erlaubt gmx_get_message, bereinigtes HTML zu liefern (format html). Aus: nur Text."
         }
       }
     }
@@ -99,7 +103,14 @@
     },
     "enabled_tools": {
       "options": {
-        "gmx_get_status": "Lesen: Status der Verbindung (gmx_get_status)"
+        "gmx_get_status": "Lesen: Status der Verbindung (gmx_get_status)",
+        "gmx_list_folders": "Lesen: Ordner auflisten (gmx_list_folders)",
+        "gmx_search": "Lesen: Mails suchen (gmx_search)",
+        "gmx_get_message": "Lesen: Mail lesen (gmx_get_message)",
+        "gmx_get_attachment": "Lesen: Anhang als Text oder Datei abrufen (gmx_get_attachment)",
+        "gmx_get_raw_message": "Lesen: Mail als .eml herunterladen (gmx_get_raw_message)",
+        "gmx_get_thread": "Lesen: Gesprächsverlauf anzeigen (gmx_get_thread)",
+        "gmx_list_keywords": "Lesen: Schlagwörter auflisten (gmx_list_keywords)"
       }
     }
   },

@@ -25,6 +25,11 @@ CONF_ALLOWED_USER: Final = "allowed_user"
 CONF_ENABLED_TOOLS: Final = "enabled_tools"
 # Seconds a single tool call may take before the client gets an error (the IMAP command itself is not cancelled).
 TOOL_CALL_TIMEOUT_S: Final = 120.0
+# Largest attachment or raw message a tool returns (D14, D26). The ceiling keeps the base64 answer below the 16 MiB a
+# Claude Code response may have (10 MB -> ~13.4 MB base64). claude.ai accepts ~150 000 characters per result (~110 KB file).
+CONF_MAX_ATTACHMENT_MB: Final = "max_attachment_mb"
+DEFAULT_MAX_ATTACHMENT_MB: Final = 10
+MAX_ATTACHMENT_MB: Final = 10
 
 
 class Security(StrEnum):

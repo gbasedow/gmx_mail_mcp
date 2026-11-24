@@ -121,6 +121,9 @@ class ImapSession(Protocol):
     def append(self, folder: str, msg: bytes, flags: Sequence[str] = (), msg_time: Any = None) -> Any:
         """APPEND."""
 
+    def thread(self, algorithm: str = "REFERENCES", criteria: Any = "ALL", charset: str = "UTF-8") -> Any:
+        """UID THREAD (RFC 5256): nested tuples of UIDs."""
+
 
 class Executor(Protocol):
     """Runs a blocking callable outside the event loop (``hass.async_add_executor_job``)."""

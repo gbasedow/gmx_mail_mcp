@@ -26,8 +26,8 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - **M0 (Spike) vorhanden:** MCP-Endpunkt (eigene JSON-RPC-Schicht, D20) mit HA-Token und Benutzerprüfung (D9), Config-Flow nur mit Benutzerwahl, Spike-Tool; Bericht `docs/M0-SPIKE.md`.
 - **M1 vorhanden:** Config-Flow mit Kontodaten (mehrere Konten, Benutzerwahl, Reauth, Reconfigure), Options-Flow mit Verbindungs-URL und Tool-Schaltern (D22, D23),
   Verbindungsverwaltung (`ImapWorker`), Tool-Registry (`mcp/registry.py`), erstes Tool `gmx_get_status`. Bericht `docs/M1.md`.
-- **Noch nicht vorhanden (zu bauen):** Lese-, Organisier-, Lösch- und Sende-Tools,
-  Anhang-Auslieferung (Text und Datei), Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
+- **M2 vorhanden:** 8 Lese-Tools inkl. `gmx_get_attachment` (Text/Datei, `extract.py` mit pypdf + Standardbibliothek), Roh-Mail, Thread, Schlagwörter; Optionen Anhang-Limit und HTML. Bericht `docs/M2.md`.
+- **Noch nicht vorhanden (zu bauen):** Organisier-, Lösch- und Sende-Tools, Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.
 
@@ -49,7 +49,7 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 ## 4. Technische Eckpunkte
 
 - Python ≥ 3.14 (Syntax wie `except A, B:` aus PEP 758 kommt im Code vor; mit 3.13 lässt sich nichts importieren). Keine kompilierten Abhängigkeiten
-  (aarch64 und amd64). Bibliotheken: `imapclient` (Arbeitsverbindung, Executor, ein `asyncio.Lock`), `aioimaplib` (IDLE), `smtplib`/`email` aus der Standardbibliothek.
+  (aarch64 und amd64). Bibliotheken: `imapclient` (Arbeitsverbindung, Executor, ein `asyncio.Lock`), `pypdf` (Textextraktion, D27), `smtplib`/`email` aus der Standardbibliothek; `aioimaplib` (IDLE) nur noch für Client-Tests, nicht im Manifest (D24).
 - GMX: IMAP `imap.gmx.net:993` (TLS), SMTP `mail.gmx.net:587` (STARTTLS), App-Passwort. Max. 2 IMAP-Verbindungen je Konto. Details in `GMX-NOTES.md`.
 - Nie `CLOSE` nach Read-Write-`SELECT`, sondern `UNSELECT`; nie mailbox-weites `EXPUNGE`, nur `UID EXPUNGE` (UIDPLUS); Lesen nur mit `BODY.PEEK`.
 - Mail-Referenz `{folder, uid, uidvalidity}`; bei geänderter `uidvalidity` ablehnen.
@@ -63,7 +63,7 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 
 ```
 uv venv --python 3.14 .venv && uv pip install --python .venv/bin/python -r requirements_dev.txt
-.venv/bin/python -m pytest -q tests/client tests/mcp tests/ha  # Client-Schicht, MCP-Protokoll, HA (Endpunkt, Flow)
+.venv/bin/python -m pytest -q tests/client tests/mcp tests/ha  # Client-Schicht, MCP (Protokoll, Tools, Extraktion), HA (Endpunkt, Flows)
 .venv/bin/python -m pytest -q -p no:cacheprovider -p no:homeassistant tests/probe  # Probe-Skript gegen Fake-IMAP (≈ 70 s)
 python3 tools/make_test_certs.py && docker compose up -d greenmail dovecot
 .venv/bin/python -m pytest -q -p no:homeassistant -m integration tests/integration  # Servertests (GreenMail, GMX-naher Dovecot)

@@ -21,6 +21,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry, MockUs
 from custom_components.gmx_mail_mcp.const import DOMAIN
 from custom_components.gmx_mail_mcp.http import endpoint_path
 from custom_components.gmx_mail_mcp.mcp.protocol import LATEST_PROTOCOL_VERSION
+from custom_components.gmx_mail_mcp.mcp.registry import default_enabled_tools
 
 from .conftest import MCP_HEADERS, bearer, rpc
 
@@ -66,7 +67,8 @@ async def test_initialize_list_and_call_with_long_lived_token(client: TestClient
     assert await resp.read() == b""
 
     resp = await _post(client, entry.entry_id, rpc("tools/list", request_id=2), headers)
-    assert [t["name"] for t in (await resp.json())["result"]["tools"]] == ["gmx_get_status"]
+    # Default (D12): every read tool on, in catalogue order.
+    assert [t["name"] for t in (await resp.json())["result"]["tools"]] == default_enabled_tools()
 
     resp = await _post(client, entry.entry_id, rpc("tools/call", {"name": "gmx_get_status", "arguments": {}}, 3), headers)
     result = (await resp.json())["result"]

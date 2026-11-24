@@ -15,6 +15,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -33,12 +34,14 @@ from .client.smtp import check_smtp_login
 from .connect_info import claude_code_command, connection_url
 from .connection import create_tls_context, imap_settings_from_data, smtp_settings_from_data
 from .const import (
+    CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOWED_USER,
     CONF_EMAIL,
     CONF_ENABLED_TOOLS,
     CONF_IMAP_HOST,
     CONF_IMAP_PORT,
     CONF_IMAP_SECURITY,
+    CONF_MAX_ATTACHMENT_MB,
     CONF_PASSWORD,
     CONF_SMTP_HOST,
     CONF_SMTP_PORT,
@@ -46,10 +49,12 @@ from .const import (
     DEFAULT_IMAP_HOST,
     DEFAULT_IMAP_PORT,
     DEFAULT_IMAP_SECURITY,
+    DEFAULT_MAX_ATTACHMENT_MB,
     DEFAULT_SMTP_HOST,
     DEFAULT_SMTP_PORT,
     DEFAULT_SMTP_SECURITY,
     DOMAIN,
+    MAX_ATTACHMENT_MB,
     SECTION_SERVER,
     Security,
 )
@@ -242,15 +247,24 @@ class GmxMailMcpConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class GmxMailMcpOptionsFlow(OptionsFlow):
-    """Connection URL (D22) and tool switches (D12). Switches take effect at once, without a reload."""
+    """Connection URL (D22), tool switches (D12), attachment limit (D14) and HTML output (D29). All take effect at once."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Show the URL and the switches."""
+        """Show the URL and the settings."""
+        options = self.config_entry.options
         if user_input is not None:
             chosen = set(user_input.get(CONF_ENABLED_TOOLS) or ())
             # Catalogue order; names the selector does not offer cannot get in.
             enabled = [spec.name for spec in TOOL_SPECS if spec.name in chosen]
-            return self.async_create_entry(data={**self.config_entry.options, CONF_ENABLED_TOOLS: enabled})
+            limit = min(MAX_ATTACHMENT_MB, max(1, int(user_input.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB))))
+            return self.async_create_entry(
+                data={
+                    **options,
+                    CONF_ENABLED_TOOLS: enabled,
+                    CONF_MAX_ATTACHMENT_MB: limit,
+                    CONF_ALLOW_HTML_OUTPUT: bool(user_input.get(CONF_ALLOW_HTML_OUTPUT, False)),
+                }
+            )
 
         url = connection_url(self.hass, self.config_entry.entry_id)
         schema = probatio.Schema(
@@ -262,10 +276,21 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
                         mode=SelectSelectorMode.LIST,
                         translation_key=CONF_ENABLED_TOOLS,
                     )
-                )
+                ),
+                probatio.Required(CONF_MAX_ATTACHMENT_MB, default=DEFAULT_MAX_ATTACHMENT_MB): probatio.All(
+                    NumberSelector(
+                        NumberSelectorConfig(min=1, max=MAX_ATTACHMENT_MB, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="MB")
+                    ),
+                    probatio.Coerce(int),
+                ),
+                probatio.Required(CONF_ALLOW_HTML_OUTPUT, default=False): BooleanSelector(),
             }
         )
-        suggested = {CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in enabled_tool_names(self.config_entry.options)]}
+        suggested = {
+            CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in enabled_tool_names(options)],
+            CONF_MAX_ATTACHMENT_MB: int(options.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB)),
+            CONF_ALLOW_HTML_OUTPUT: bool(options.get(CONF_ALLOW_HTML_OUTPUT, False)),
+        }
         return self.async_show_form(
             step_id="init",
             data_schema=self.add_suggested_values_to_schema(schema, suggested),

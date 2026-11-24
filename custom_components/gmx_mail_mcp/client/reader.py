@@ -29,6 +29,7 @@ from .errors import (
     GmxPartNotFoundError,
     GmxSearchRejectedError,
     GmxUidValidityError,
+    GmxUnsupportedError,
 )
 from .folders import FolderMap, parse_folder_list
 from .imap import CONNECTION_ERRORS, ImapSession, ServerInfo
@@ -164,6 +165,13 @@ class SearchResult:
 @contextmanager
 def examine(session: ImapSession, info: ServerInfo, folder: str) -> Iterator[int]:
     """Open ``folder`` read-only and yield its UIDVALIDITY; leave it with UNSELECT (never CLOSE)."""
+    with examine_response(session, info, folder) as response:
+        yield int(response.get(b"UIDVALIDITY", 0))
+
+
+@contextmanager
+def examine_response(session: ImapSession, info: ServerInfo, folder: str) -> Iterator[dict[bytes, Any]]:
+    """Like :func:`examine`, but yield the whole EXAMINE response (FLAGS, PERMANENTFLAGS, ...)."""
     try:
         response = session.select_folder(folder, readonly=True)
     except CONNECTION_ERRORS:
@@ -171,7 +179,7 @@ def examine(session: ImapSession, info: ServerInfo, folder: str) -> Iterator[int
     except IMAPClientError as err:
         raise GmxFolderNotFoundError(f"folder cannot be opened: {type(err).__name__}") from err
     try:
-        yield int(response.get(b"UIDVALIDITY", 0))
+        yield response
     finally:
         if info.has("UNSELECT"):
             # A failing UNSELECT on a read-only folder is harmless; the next SELECT replaces it.
@@ -751,6 +759,80 @@ def get_attachment(session: ImapSession, info: ServerInfo, ref: MailRef, part_id
     if len(content) > max_bytes:
         raise GmxAttachmentTooLargeError("attachment too large")
     return part, content
+
+
+def get_raw_message(session: ImapSession, info: ServerInfo, ref: MailRef, *, max_bytes: int) -> bytes:
+    """Return the complete message (RFC 5322 source, as stored). The size is checked before downloading."""
+    with examine(session, info, ref.folder) as uidvalidity:
+        _check_uidvalidity(ref, uidvalidity)
+        data = session.fetch([ref.uid], ["RFC822.SIZE"]).get(ref.uid)
+        if not data:
+            raise GmxMessageNotFoundError("no such message")
+        if int(data.get(b"RFC822.SIZE", 0)) > max_bytes:
+            raise GmxAttachmentTooLargeError("message too large")
+        raw = _find_key(session.fetch([ref.uid], ["BODY.PEEK[]"]).get(ref.uid) or {}, b"BODY[]")
+    if raw is None:
+        raise GmxMessageNotFoundError("no such message")
+    content = bytes(raw)
+    if len(content) > max_bytes:
+        raise GmxAttachmentTooLargeError("message too large")
+    return content
+
+
+def _flatten_thread(node: Any) -> list[int]:
+    """UIDs of a THREAD response node in server order (nested tuples are branches)."""
+    if isinstance(node, int):
+        return [node]
+    uids: list[int] = []
+    for child in node or ():
+        uids.extend(_flatten_thread(child))
+    return uids
+
+
+@dataclass(slots=True)
+class ThreadResult:
+    """The thread containing one message."""
+
+    algorithm: str
+    total: int
+    messages: list[dict[str, Any]]
+
+
+def get_thread(session: ImapSession, info: ServerInfo, ref: MailRef, *, limit: int) -> ThreadResult:
+    """Messages of the same thread in the folder of ``ref`` (REFERENCES if offered, else ORDEREDSUBJECT; GMX: the latter)."""
+    if info.has("THREAD=REFERENCES"):
+        algorithm = "REFERENCES"
+    elif info.has("THREAD=ORDEREDSUBJECT"):
+        algorithm = "ORDEREDSUBJECT"
+    else:
+        raise GmxUnsupportedError("thread_unsupported")
+    with examine(session, info, ref.folder) as uidvalidity:
+        _check_uidvalidity(ref, uidvalidity)
+        try:
+            threads = session.thread(algorithm, ["UNDELETED"], "UTF-8")
+        except CONNECTION_ERRORS:
+            raise
+        except IMAPClientError as err:
+            raise GmxSearchRejectedError(f"THREAD rejected: {type(err).__name__}") from err
+        members = next((uids for uids in (_flatten_thread(t) for t in threads or ()) if ref.uid in uids), None)
+        if members is None:
+            raise GmxMessageNotFoundError("message not in any thread")
+        messages = _summaries(session, ref.folder, uidvalidity, members[:limit], snippet=False)
+    return ThreadResult(algorithm=algorithm, total=len(members), messages=messages)
+
+
+def _flag_strings(values: Any) -> list[str]:
+    return [v.decode("utf-8", "replace") if isinstance(v, bytes) else str(v) for v in values or ()]
+
+
+def list_keywords(session: ImapSession, info: ServerInfo, folder: str) -> dict[str, Any]:
+    """Keywords the folder announces in its FLAGS response, and whether new ones may be set (PERMANENTFLAGS \\*)."""
+    with examine_response(session, info, folder) as response:
+        flags = _flag_strings(response.get(b"FLAGS"))
+        permanent = _flag_strings(response.get(b"PERMANENTFLAGS"))
+    # System flags start with a backslash; everything else is a keyword (external data: cleaned and shortened).
+    keywords = sorted({clean_inline(f, 64) for f in flags if not f.startswith("\\")})
+    return {"folder": folder, "keywords": keywords, "custom_keywords_allowed": "\\*" in permanent}
 
 
 # --------------------------------------------------------------------------- polling (coordinator, M3)

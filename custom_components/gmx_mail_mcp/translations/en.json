@@ -82,10 +82,14 @@
         "title": "MCP access and tools",
         "description": "**Connection URL:** `{url}`\n\n**claude.ai:** add a custom connector with this URL and sign in with the allowed Home Assistant user.\n\n**Claude Code:** create a long-lived access token as the allowed user (Profile > Security), then run:\n\n`{claude_code}`\n\nOnly the tools switched on below are visible and callable. Default: read-only tools.",
         "data": {
-          "enabled_tools": "Enabled tools"
+          "enabled_tools": "Enabled tools",
+          "max_attachment_mb": "Size limit for attachments and .eml",
+          "allow_html_output": "Allow HTML output"
         },
         "data_description": {
-          "enabled_tools": "Changes apply immediately, without a restart."
+          "enabled_tools": "Changes apply immediately, without a restart.",
+          "max_attachment_mb": "Largest file gmx_get_attachment and gmx_get_raw_message return (1–10 MB). claude.ai accepts only about 110 KB per answer; Claude Code up to the limit.",
+          "allow_html_output": "Lets gmx_get_message return cleaned HTML (format html). Off: text only."
         }
       }
     }
@@ -99,7 +103,14 @@
     },
     "enabled_tools": {
       "options": {
-        "gmx_get_status": "Read: status of the connection (gmx_get_status)"
+        "gmx_get_status": "Read: connection status (gmx_get_status)",
+        "gmx_list_folders": "Read: list folders (gmx_list_folders)",
+        "gmx_search": "Read: search mail (gmx_search)",
+        "gmx_get_message": "Read: read a mail (gmx_get_message)",
+        "gmx_get_attachment": "Read: get an attachment as text or file (gmx_get_attachment)",
+        "gmx_get_raw_message": "Read: download a mail as .eml (gmx_get_raw_message)",
+        "gmx_get_thread": "Read: show a conversation (gmx_get_thread)",
+        "gmx_list_keywords": "Read: list keywords (gmx_list_keywords)"
       }
     }
   },
