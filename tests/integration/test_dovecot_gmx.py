@@ -507,7 +507,8 @@ def test_m3_spam_subscription_draft_attachment_and_trash_guard(mailer: IMAPClien
 
         files = attachments(parse_bodystructure(structure))
         assert [(f.filename, f.mime) for f in files] == [("plan.pdf", "application/pdf")]
-        assert files[0].size_estimated == len(pdf)  # base64 with CRLF lines: the estimate is exact
+        # base64 with CRLF lines: exact up to the padding (0-2 bytes too high; 10 249 bytes -> 2 padding characters)
+        assert len(pdf) <= files[0].size_estimated <= len(pdf) + 2
     finally:
         session.logout()
         # Clean up exactly what this test created (UID EXPUNGE, never a mailbox-wide EXPUNGE).

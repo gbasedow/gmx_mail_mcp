@@ -42,8 +42,9 @@ class PartInfo:
     def size_estimated(self) -> int:
         """Approximate size of the decoded file; ``size`` is the transfer-encoded size from BODYSTRUCTURE.
 
-        base64 (the usual case): lines of 76 characters plus CRLF, 4 characters per 3 bytes - exact for the usual
-        line length, slightly low for base64 without line breaks. quoted-printable: the encoded size (an upper bound).
+        base64 (the usual case): lines of 76 characters plus CRLF, 4 characters per 3 bytes - for the usual line length
+        at most 2 bytes too high (the padding is not visible in the size), slightly low for base64 without line breaks.
+        quoted-printable: the encoded size (an upper bound).
         """
         if self.encoding != "base64" or self.size <= 0:
             return self.size

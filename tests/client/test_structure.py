@@ -91,7 +91,7 @@ def test_tolerates_short_and_malformed_structures() -> None:
 
 
 def test_size_estimated_from_encoded_size() -> None:
-    """base64 with 76-character lines + CRLF: exact (live case from M2: 72 110 encoded = 52 695-byte PDF)."""
+    """base64 with 76-character lines + CRLF: up to 2 bytes high (padding); live case from M2 (72 110 -> 52 695) exact."""
 
     def part(size: int, encoding: str) -> PartInfo:
         return PartInfo("2", "application/pdf", size, encoding, None, "a.pdf", "attachment", None)
