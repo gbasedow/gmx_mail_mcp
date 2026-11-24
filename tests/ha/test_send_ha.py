@@ -107,6 +107,29 @@ async def test_rejected_smtp_login_raises_an_issue_and_asks_for_a_new_password(
     assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
 
 
+async def test_mode_any_raises_an_issue_until_it_is_set_back(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    entry = await add_entry(mcp_user, {**SEND_OPTIONS, "send_mode": "any"})
+    issue_id = f"send_mode_any_{entry.entry_id}"
+    issue = ir.async_get(hass).async_get_issue(DOMAIN, issue_id)
+    assert issue is not None and issue.severity == ir.IssueSeverity.WARNING
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "send_mode": "allowlist"})
+    await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "send_mode": "any"})
+    await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is not None
+    # Removing the account removes its issues.
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None
+
+
+async def test_allowlist_mode_raises_no_issue(hass: HomeAssistant, add_entry: AddEntry, mcp_user: MockUser) -> None:
+    entry = await add_entry(mcp_user, SEND_OPTIONS)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, f"send_mode_any_{entry.entry_id}") is None
+
+
 async def _open(hass: HomeAssistant, entry: MockConfigEntry) -> dict[str, Any]:
     return dict(await hass.config_entries.options.async_init(entry.entry_id))
 

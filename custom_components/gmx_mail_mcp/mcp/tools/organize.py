@@ -237,10 +237,13 @@ def _build_rename_folder(context: ToolContext) -> Tool:
         folder = get_str(args, "folder", max_len=MAX_FOLDER, required=True) or ""
         new_name = get_str(args, "new_name", max_len=MAX_FOLDER_NAME, required=True) or ""
         info, folder_map = await server_state(context)
-        path, warnings = await context.worker.async_run(
+        path, subscribed, warnings = await context.worker.async_run(
             lambda s: rename_folder_keep_subscription(s, info, folder_map, folder, new_name), readonly=False
         )
-        return json_result(envelope(context.account, "rename_folder", {"old_path": folder, "path": path}, warnings=warnings))
+        data: dict[str, Any] = {"old_path": folder, "path": path}
+        if subscribed is not None:
+            data["subscribed"] = subscribed
+        return json_result(envelope(context.account, "rename_folder", data, warnings=warnings))
 
     return Tool(
         name="gmx_rename_folder",

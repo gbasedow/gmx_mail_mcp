@@ -211,6 +211,10 @@
     "smtp_auth_failed": {
       "title": "GMX rejected the SMTP login for {account}",
       "description": "Sending failed because GMX rejected the login (app password revoked or changed). Nothing was sent. Re-authenticate the integration with a valid app password."
+    },
+    "send_mode_any": {
+      "title": "Sending to any address is switched on for {account}",
+      "description": "In the options, “Who may receive mail” is set to “Any address”: the sending tools that are switched on can send to every address; the allowlist is not checked. If this is not intended: Settings > Devices & services > GMX Mail MCP > Configure, choose “Only the allowlist”, enter your addresses and save. This notice stays while “Any address” is chosen."
     }
   }
 }

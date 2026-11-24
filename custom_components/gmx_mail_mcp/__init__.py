@@ -22,8 +22,10 @@ from .connection import (
     async_create_auth_issue,
     async_create_smtp_auth_issue,
     async_delete_auth_issue,
+    async_delete_entry_issues,
     async_delete_smtp_auth_issue,
     async_update_new_tools_issue,
+    async_update_send_mode_issue,
     create_tls_context,
     imap_settings_from_data,
     smtp_settings_from_data,
@@ -116,10 +118,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
         tools=lambda: enabled_tools(tools, entry.options),
     )
     async_update_new_tools_issue(hass, entry)
+    async_update_send_mode_issue(hass, entry)
 
     async def _options_updated(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> None:
-        # Options act without a reload (switches are read per message); only the repair hint follows them.
+        # Options act without a reload (switches are read per message); only the repair hints follow them.
         async_update_new_tools_issue(hass, entry)
+        async_update_send_mode_issue(hass, entry)
 
     entry.async_on_unload(entry.add_update_listener(_options_updated))
     entry.runtime_data = RuntimeData(
@@ -141,5 +145,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> None:
-    """Delete the audit log and the counters of a removed account (D42)."""
+    """Delete the audit log, the counters and the repair issues of a removed account (D42)."""
     await async_remove_ledgers(hass, entry.entry_id)
+    async_delete_entry_issues(hass, entry)

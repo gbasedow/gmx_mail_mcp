@@ -19,14 +19,17 @@ from .const import (
     CONF_IMAP_PORT,
     CONF_IMAP_SECURITY,
     CONF_PASSWORD,
+    CONF_SEND_MODE,
     CONF_SMTP_HOST,
     CONF_SMTP_PORT,
     CONF_SMTP_SECURITY,
     DOMAIN,
     ISSUE_IMAP_POSSIBLY_DISABLED,
     ISSUE_NEW_TOOLS,
+    ISSUE_SEND_MODE_ANY,
     ISSUE_SMTP_AUTH_FAILED,
     Security,
+    SendMode,
 )
 from .mcp.registry import new_tool_names
 
@@ -133,3 +136,33 @@ def async_update_new_tools_issue(hass: HomeAssistant, entry: ConfigEntry) -> Non
         translation_key=ISSUE_NEW_TOOLS,
         translation_placeholders={"account": entry.title, "tools": ", ".join(names)},
     )
+
+
+def send_mode_issue_id(entry: ConfigEntry) -> str:
+    """Return the repair issue id for the open recipient rule (D60)."""
+    return f"{ISSUE_SEND_MODE_ANY}_{entry.entry_id}"
+
+
+@callback
+def async_update_send_mode_issue(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Show a warning while sending may go to any address (D60); it goes away when the mode is set back."""
+    if entry.options.get(CONF_SEND_MODE) != SendMode.ANY:
+        ir.async_delete_issue(hass, DOMAIN, send_mode_issue_id(entry))
+        return
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        send_mode_issue_id(entry),
+        is_fixable=False,
+        is_persistent=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_SEND_MODE_ANY,
+        translation_placeholders={"account": entry.title},
+    )
+
+
+@callback
+def async_delete_entry_issues(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove every repair issue of a removed account."""
+    for issue_id in (auth_issue_id(entry), smtp_auth_issue_id(entry), new_tools_issue_id(entry), send_mode_issue_id(entry)):
+        ir.async_delete_issue(hass, DOMAIN, issue_id)

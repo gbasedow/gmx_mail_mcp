@@ -427,8 +427,12 @@ def create_folder_subscribed(
 
 def rename_folder_keep_subscription(
     session: ImapSession, info: ServerInfo, folder_map: FolderMap, path: str, new_name: str
-) -> tuple[str, list[str]]:
-    """Rename a folder; a subscription moves to the new name (D44). Warnings: ``subscription_unknown``, ``subscribe_failed``."""
+) -> tuple[str, bool | None, list[str]]:
+    """Rename a folder; a subscription moves to the new name (D44).
+
+    Returns the new path, whether the new name is subscribed (None if unknown) and warnings ``subscription_unknown``,
+    ``subscribe_failed``.
+    """
     try:
         was_subscribed: bool | None = path in {f.name for f in parse_folder_list(session.list_sub_folders())}
     except CONNECTION_ERRORS:
@@ -437,12 +441,12 @@ def rename_folder_keep_subscription(
         was_subscribed = None  # LSUB refused: rename without touching subscriptions
     new_path = rename_folder(session, info, folder_map, path, new_name)
     if was_subscribed is None:
-        return new_path, ["subscription_unknown"]
+        return new_path, None, ["subscription_unknown"]
     if not was_subscribed:
-        return new_path, []
-    warnings = [] if _try_subscription(session, new_path, subscribed=True) else ["subscribe_failed"]
+        return new_path, False, []
+    subscribed = _try_subscription(session, new_path, subscribed=True)
     _try_subscription(session, path, subscribed=False)  # stale entry of the old name; servers may have moved it already
-    return new_path, warnings
+    return new_path, subscribed, [] if subscribed else ["subscribe_failed"]
 
 
 # --------------------------------------------------------------------------- drafts

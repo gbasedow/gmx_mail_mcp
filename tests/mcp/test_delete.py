@@ -465,14 +465,14 @@ def test_delete_counter_rolls_over_and_restores() -> None:
 async def test_rename_keeps_unsubscribed_state(server: McpServer, imap: FakeImapServer) -> None:
     imap.subscribed = {"INBOX"}
     result = await call(server, "gmx_rename_folder", {"folder": "Archiv", "new_name": "Ablage"})
-    assert result["data"]["warnings"] == []
+    assert result["data"]["warnings"] == [] and result["data"]["data"]["subscribed"] is False
     assert imap.subscribed == {"INBOX"}
 
 
 async def test_rename_without_lsub_warns(server: McpServer, imap: FakeImapServer) -> None:
     imap.lsub_error = IMAPClientError("LSUB failed")
     result = await call(server, "gmx_rename_folder", {"folder": "Archiv", "new_name": "Ablage"})
-    assert result["data"]["data"]["path"] == "Ablage"
+    assert result["data"]["data"]["path"] == "Ablage" and "subscribed" not in result["data"]["data"]
     assert result["data"]["warnings"] == ["subscription_unknown"]
 
 

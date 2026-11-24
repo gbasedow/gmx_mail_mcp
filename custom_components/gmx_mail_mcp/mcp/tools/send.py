@@ -170,6 +170,8 @@ class _Request:
     compose: Callable[[ImapSession | None], Outgoing]
     needs_imap: bool
     warnings: list[str] = field(default_factory=list)
+    # Recipient rule the call was checked against (shown in the preview and the answer, D60).
+    send_mode: str = ""
 
 
 def _domains(addresses: list[str]) -> list[str]:
@@ -281,6 +283,10 @@ async def _send_flow(context: ToolContext, request: _Request, token: str | None,
     if (unavailable := _unavailable(context, policy)) is not None:
         return unavailable
     skip = skips_confirmation(options, request.tool)
+    request.send_mode = policy.send_mode
+    if policy.send_mode == SendMode.ANY:
+        # Make an open recipient rule visible in every preview and answer (D60); the allowlist is not checked.
+        request.warnings.append("recipients_unrestricted")
     lock = context.send_lock
     await lock.acquire()
     handed_over = False
@@ -296,6 +302,7 @@ async def _send_flow(context: ToolContext, request: _Request, token: str | None,
         if not skip and token is None:
             data: dict[str, Any] = {
                 "preview": _preview(outgoing, options),
+                "send_mode": policy.send_mode,
                 "sent": False,
                 "confirm_token": context.tokens.issue(request.tool, request.params),
                 "expires_in": context.tokens.ttl,
@@ -409,8 +416,12 @@ async def _deliver(
     context.sends.add(count)
     warnings = list(request.warnings)
     sent_copy = await _follow_up(context, outgoing, folder_map, warnings)
+    sent_folder = folder_map.get(FolderRole.SENT) if sent_copy == "appended" else None
+    if sent_folder:
+        facts["folders"] = [sent_folder]  # the copy is a write into this folder (audit, D41)
     data = {
         "sent": True,
+        "send_mode": request.send_mode,
         "message_id": str(outgoing.message["Message-ID"]),
         "recipients": count,
         "sent_copy": sent_copy,
