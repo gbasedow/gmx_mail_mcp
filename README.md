@@ -6,5 +6,5 @@ MCP-Server für ein GMX-Postfach als Home-Assistant-Integration (in Entwicklung,
 - Schutz: Long-Lived Access Token von Home Assistant (Bearer) **und** jedes Tool einzeln ein-/ausschaltbar; Voreinstellung nur lesen.
 - Entwicklung mit Claude Code: Start mit `CLAUDE.md`, `SPEC.md`, `docs/OFFENE-PUNKTE.md`.
 
-Stand: M0–M3 (Endpunkt, Config-Flow, 8 Lese-Tools, 9 Organisier-Tools), siehe `docs/M1.md` bis `docs/M3.md`. Die HA-freie IMAP/SMTP-Schicht
-stammt aus [`gbasedow/gmx_mail`](https://github.com/gbasedow/gmx_mail). Löschen (M4) und Senden (M5) folgen nach `SPEC.md` §8.
+Stand: M0–M4 (Endpunkt, Config-Flow, 9 Lese-Tools inkl. Audit-Log, 9 Organisier-Tools, 3 Lösch-Tools), siehe `docs/M1.md` bis `docs/M4.md`. Die HA-freie IMAP/SMTP-Schicht
+stammt aus [`gbasedow/gmx_mail`](https://github.com/gbasedow/gmx_mail). Senden (M5) folgt nach `SPEC.md` §8.

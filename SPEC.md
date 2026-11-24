@@ -46,13 +46,13 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `get_message` | R | Kopfzeilen, bereinigter Text, Anhangsliste; optional HTML (nur mit Option) |
 | `get_attachment` | R | **Ganze Datei** (siehe §5) |
 | `get_raw_message` *(neu)* | R | Vollständige RFC-822-Nachricht (`.eml`) (D13) |
-| `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus mit Capabilities (M2), Audit-Log (M4) |
+| `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus mit Capabilities (M2), Audit-Log (M4, D41) |
 | `get_thread`, `list_keywords` *(neu, M2)* | R | Gesprächsverlauf (ORDEREDSUBJECT), Schlagwörter eines Ordners (D28) |
 | `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel; Papierkorb als Ziel gesperrt (D32), Spam mit `$Junk`/`$NotJunk` (D33) – **M3** |
-| `create_folder`, `rename_folder`, `subscribe_folder` | O | Ordnerverwaltung, Abo (D34) – **M3** |
+| `create_folder`, `rename_folder`, `subscribe_folder` | O | Ordnerverwaltung, Abo (D34) – **M3**; neue Ordner werden abonniert, Umbenennen überträgt das Abo (D44, M4) |
 | `save_draft` | O | Entwurf per APPEND, Text und Anhänge (D35) – **M3** |
-| `trash` | D | In den Papierkorb |
-| `delete_permanently`, `delete_folder` | D | nur mit Option + Vorschau + Bestätigungscode (§4) |
+| `trash` | D | In den Papierkorb, ohne Code (D38) – **M4** |
+| `delete_permanently`, `delete_folder` | D | endgültig nur mit Option; Ordner nur leer (D40); Vorschau + Bestätigungscode, je Tool abschaltbar (D45) – **M4** |
 | `send_message`, `reply`, `forward`, `send_draft` | S | Versand-Modus `off`/`allowlist`/`any`, Vorschau + Code |
 
 Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=ORDEREDSUBJECT`), Ordner abonnieren, `append` einer hochgeladenen `.eml`,
@@ -66,12 +66,14 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
    Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
 3. **Versand:** Allowlist/Modus, Empfänger- und Stundenlimit, Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
-   Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist die Allowlist. Mit direktem MCP-Zugriff gibt es keine
+   Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist die Allowlist.
+   Der Nutzer kann den Code **je Tool** im Optionsdialog abschalten (`tools_without_confirmation`, D45; Voreinstellung: überall an). Mit direktem MCP-Zugriff gibt es keine
    ha-mcp-Freigabe mehr – die Rückfrage übernimmt der Client (Claude fragt bei Connectoren standardmäßig vor Tool-Aufrufen).
-4. **Löschen:** Papierkorb zuerst; endgültig nur mit Option, nur Papierkorb/Spam, `UID EXPUNGE` genau dieser UIDs, Tageslimit.
+4. **Löschen:** Papierkorb zuerst; endgültig nur mit Option, nur Papierkorb/Spam, `UID EXPUNGE` genau dieser UIDs; höchstens 50 Mails je Aufruf.
+   Tageslimit optional (`max_delete_per_day`, Standard 0 = ohne, D39 ändert den ursprünglichen Entwurf).
 5. **Inhalte sind Daten:** Rahmen mit Zufallskennung, `content_trust`, Bereinigung versteckter Texte und unsichtbarer Zeichen (`client/sanitize.py`),
    Angriffssammlung als Test (`tests/client/test_injection_corpus.py`). Das gilt auch für Anhänge (§5).
-6. **Audit-Log** je Aufruf (Tool, Zeit, Benutzer, Fingerabdruck der Parameter, Ergebnis; keine Inhalte).
+6. **Audit-Log** je Aufruf der Stufen O/D/S, auch Vorschau, Ablehnung, Fehler und Abbruch (Tool, Zeit, Benutzer, Ordnernamen, Anzahl, Fingerabdruck der Parameter, Ergebnis; keine Inhalte), D41; Aufbewahrung D42.
 7. Keine Zugangsdaten in Logs, Diagnose und Antworten. Fehler als JSON-RPC-Fehler bzw. `isError` mit Übersetzungsschlüssel.
 
 ## 5. Anhänge (Kernanforderung)
@@ -110,7 +112,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test bestanden – siehe `docs/M3.md`. |
-| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. |
+| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test offen – siehe `docs/M4.md`. |
 | M5 | Senden (Stufe S), Gesendet-Kopie, Limits. |
 | M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
 
