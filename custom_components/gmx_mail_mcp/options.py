@@ -73,7 +73,7 @@ OPTION_SECTIONS: Final[dict[str, tuple[str, ...]]] = {
 INT_RANGES: Final[dict[str, tuple[int, int | None]]] = {
     CONF_MAX_RECIPIENTS: (1, None),
     CONF_MAX_SEND_PER_DAY: (1, None),
-    CONF_MAX_DELETE_PER_DAY: (1, None),
+    CONF_MAX_DELETE_PER_DAY: (0, None),  # 0 = no daily limit (D39)
     CONF_MAX_RECIPIENTS_PER_HOUR: (1, None),
     CONF_MAX_MESSAGE_SIZE_MB: (1, MAX_MESSAGE_SIZE_MB),
     CONF_POLL_INTERVAL: (POLL_INTERVAL_MIN_S, POLL_INTERVAL_MAX_S),

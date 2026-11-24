@@ -18,11 +18,11 @@ from ...client.writer import (
     DraftInput,
     WriteResult,
     copy_or_move,
-    create_folder,
+    create_folder_subscribed,
     mark_spam,
     normalize_flags,
     parse_addresses,
-    rename_folder,
+    rename_folder_keep_subscription,
     save_draft,
     set_flags,
     set_subscription,
@@ -203,15 +203,18 @@ def _build_create_folder(context: ToolContext) -> Tool:
         name = get_str(args, "name", max_len=MAX_FOLDER_NAME, required=True) or ""
         parent = get_str(args, "parent", max_len=MAX_FOLDER)
         info, folder_map = await server_state(context)
-        path = await context.worker.async_run(lambda s: create_folder(s, info, folder_map, name, parent), readonly=False)
-        return json_result(envelope(context.account, "create_folder", {"path": path}))
+        path, warnings = await context.worker.async_run(
+            lambda s: create_folder_subscribed(s, info, folder_map, name, parent), readonly=False
+        )
+        return json_result(envelope(context.account, "create_folder", {"path": path, "subscribed": not warnings}, warnings=warnings))
 
     return Tool(
         name="gmx_create_folder",
         title="Create a GMX folder",
         description=(
             "Creates a folder, optionally below a parent folder; not below INBOX or the special folders (Sent, Drafts, "
-            "Trash, Spam). Names must not contain / % * or control characters (at most 100 characters)."
+            "Trash, Spam), and subscribes it so mail programs show it. Names must not contain / % * or control characters "
+            "(at most 100 characters)."
         ),
         input_schema={
             "type": "object",
@@ -234,15 +237,18 @@ def _build_rename_folder(context: ToolContext) -> Tool:
         folder = get_str(args, "folder", max_len=MAX_FOLDER, required=True) or ""
         new_name = get_str(args, "new_name", max_len=MAX_FOLDER_NAME, required=True) or ""
         info, folder_map = await server_state(context)
-        path = await context.worker.async_run(lambda s: rename_folder(s, info, folder_map, folder, new_name), readonly=False)
-        return json_result(envelope(context.account, "rename_folder", {"old_path": folder, "path": path}))
+        path, warnings = await context.worker.async_run(
+            lambda s: rename_folder_keep_subscription(s, info, folder_map, folder, new_name), readonly=False
+        )
+        return json_result(envelope(context.account, "rename_folder", {"old_path": folder, "path": path}, warnings=warnings))
 
     return Tool(
         name="gmx_rename_folder",
         title="Rename a GMX folder",
         description=(
             "Renames a folder within its parent folder. INBOX and special folders (Sent, Drafts, Trash, Spam) cannot be "
-            "renamed. References to mails in the folder become invalid; search again afterwards."
+            "renamed. A subscription moves to the new name. References to mails in the folder become invalid; search again "
+            "afterwards."
         ),
         input_schema={
             "type": "object",

@@ -521,6 +521,86 @@ def test_m3_spam_subscription_draft_attachment_and_trash_guard(mailer: IMAPClien
                     mailer.unselect_folder()
 
 
+async def test_m4_tools_end_to_end(mailer: IMAPClient, folder: str) -> None:
+    """M4 through the MCP tools with a real worker: trash, two-step permanent deletion (a foreign \\Deleted mail in the trash
+    survives), audit entries; folder created subscribed, subscription moved by rename, empty folder deleted with a code."""
+    import json  # noqa: PLC0415
+
+    from custom_components.gmx_mail_mcp.const import CONF_ALLOW_PERMANENT_DELETE  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.mcp.protocol import McpServer  # noqa: PLC0415
+    from custom_components.gmx_mail_mcp.mcp.registry import ToolContext, build_tools  # noqa: PLC0415
+
+    marker = uuid.uuid4().hex[:8]
+    for subject in (f"m4-1-{marker}", f"m4-2-{marker}"):
+        await asyncio.to_thread(_deliver, mailer, folder, subject)
+    await asyncio.to_thread(_deliver, mailer, "Gelöscht", f"fremd-{marker}", (b"\\Deleted",))
+    validity = mailer.folder_status(folder, ["UIDVALIDITY"])[b"UIDVALIDITY"]
+    mailer.select_folder(folder, readonly=True)
+    refs = [{"folder": folder, "uid": uid, "uidvalidity": validity} for uid in sorted(mailer.search(["ALL"]))]
+    mailer.unselect_folder()
+
+    worker = ImapWorker(SETTINGS, executor=_executor, ssl_context_factory=_context, limiter=ConnectionLimiter())
+    context = ToolContext(worker=worker, options=lambda: {CONF_ALLOW_PERMANENT_DELETE: True}, executor=_executor, account="t", email=USER)
+    tools = build_tools(context)
+    server = McpServer(name="t", version="1", tools=lambda: tools)
+
+    async def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        outcome = await server.handle_message(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": name, "arguments": arguments}}
+        )
+        assert outcome.body is not None
+        result = outcome.body["result"]
+        payload: dict[str, Any] = json.loads(result["content"][0]["text"])
+        assert result["isError"] is False, payload
+        return payload["data"]
+
+    created_path = f"{folder}-neu"
+    try:
+        moved = await call("gmx_trash", {"refs": refs})
+        assert moved["count"] == 2 and None not in moved["new_refs"]
+        preview = await call("gmx_delete_permanently", {"refs": moved["new_refs"]})
+        assert preview["preview"]["count"] == 2 and len(_subjects(mailer, "Gelöscht")) >= 3  # nothing deleted yet
+        done = await call("gmx_delete_permanently", {"refs": moved["new_refs"], "confirm_token": preview["confirm_token"]})
+        assert (done["count"], done["confirmation"]) == (2, "code")
+        assert {s for s in _subjects(mailer, "Gelöscht").values() if marker in s} == {f"fremd-{marker}"}
+
+        created = await call("gmx_create_folder", {"name": created_path})
+        assert created["subscribed"] is True
+        assert created_path in {name for _f, _d, name in mailer.list_sub_folders()}
+        renamed = await call("gmx_rename_folder", {"folder": created_path, "new_name": f"{created_path}-2"})
+        created_path = renamed["path"]
+        subscribed = {name for _f, _d, name in mailer.list_sub_folders()}
+        assert created_path in subscribed and f"{folder}-neu" not in subscribed
+        folder_preview = await call("gmx_delete_folder", {"folder": created_path})
+        await call("gmx_delete_folder", {"folder": created_path, "confirm_token": folder_preview["confirm_token"]})
+        assert created_path not in {name for _f, _d, name in mailer.list_folders()}
+
+        outcomes = [(e["tool"], e["outcome"]) for e in reversed(context.audit.latest(20))]
+        assert outcomes == [
+            ("gmx_trash", "ok"),
+            ("gmx_delete_permanently", "preview"),
+            ("gmx_delete_permanently", "ok"),
+            ("gmx_create_folder", "ok"),
+            ("gmx_rename_folder", "ok"),
+            ("gmx_delete_folder", "preview"),
+            ("gmx_delete_folder", "ok"),
+        ]
+        assert marker not in json.dumps(context.audit.snapshot())  # no subjects in the audit log
+    finally:
+        await worker.async_shutdown()
+        own = [uid for uid, subject in _subjects(mailer, "Gelöscht").items() if marker in subject]
+        if own:
+            mailer.select_folder("Gelöscht")
+            mailer.add_flags(own, [b"\\Deleted"])
+            mailer.uid_expunge(own)
+            mailer.unselect_folder()
+        for leftover in (created_path, f"{folder}-neu"):
+            with contextlib.suppress(Exception):
+                mailer.unsubscribe_folder(leftover)
+            with contextlib.suppress(Exception):
+                mailer.delete_folder(leftover)
+
+
 def _kick() -> bool:
     """Disconnect all sessions of the test user server-side (like GMX's '* BYE timeout')."""
     root = Path(__file__).resolve().parent.parent.parent

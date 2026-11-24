@@ -403,6 +403,48 @@ def rename_folder(session: ImapSession, info: ServerInfo, folder_map: FolderMap,
     return new_path
 
 
+def _try_subscription(session: ImapSession, path: str, *, subscribed: bool) -> bool:
+    """SUBSCRIBE/UNSUBSCRIBE without failing the surrounding action; connection losses still propagate."""
+    try:
+        if subscribed:
+            session.subscribe_folder(path)
+        else:
+            session.unsubscribe_folder(path)
+    except CONNECTION_ERRORS:
+        raise
+    except IMAPClientError:
+        return False
+    return True
+
+
+def create_folder_subscribed(
+    session: ImapSession, info: ServerInfo, folder_map: FolderMap, name: str, parent: str | None
+) -> tuple[str, list[str]]:
+    """Create a folder and subscribe it (D44: GMX does not, GMX-NOTES row 45); warning ``subscribe_failed`` otherwise."""
+    path = create_folder(session, info, folder_map, name, parent)
+    return path, ([] if _try_subscription(session, path, subscribed=True) else ["subscribe_failed"])
+
+
+def rename_folder_keep_subscription(
+    session: ImapSession, info: ServerInfo, folder_map: FolderMap, path: str, new_name: str
+) -> tuple[str, list[str]]:
+    """Rename a folder; a subscription moves to the new name (D44). Warnings: ``subscription_unknown``, ``subscribe_failed``."""
+    try:
+        was_subscribed: bool | None = path in {f.name for f in parse_folder_list(session.list_sub_folders())}
+    except CONNECTION_ERRORS:
+        raise
+    except IMAPClientError:
+        was_subscribed = None  # LSUB refused: rename without touching subscriptions
+    new_path = rename_folder(session, info, folder_map, path, new_name)
+    if was_subscribed is None:
+        return new_path, ["subscription_unknown"]
+    if not was_subscribed:
+        return new_path, []
+    warnings = [] if _try_subscription(session, new_path, subscribed=True) else ["subscribe_failed"]
+    _try_subscription(session, path, subscribed=False)  # stale entry of the old name; servers may have moved it already
+    return new_path, warnings
+
+
 # --------------------------------------------------------------------------- drafts
 
 

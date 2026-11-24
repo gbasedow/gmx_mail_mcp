@@ -133,7 +133,8 @@ def test_numbers_are_coerced_and_folder_overrides_trimmed() -> None:
 def test_limits_default_to_spec_values_and_can_be_raised() -> None:
     """SPEC values are defaults only; larger values are accepted (decision 12)."""
     options, _errors = validate_options({})
-    assert (options[CONF_MAX_RECIPIENTS], options[CONF_MAX_SEND_PER_DAY], options[CONF_MAX_DELETE_PER_DAY]) == (10, 20, 200)
+    # Deleting has no daily limit by default (0, D39).
+    assert (options[CONF_MAX_RECIPIENTS], options[CONF_MAX_SEND_PER_DAY], options[CONF_MAX_DELETE_PER_DAY]) == (10, 20, 0)
     options, errors = validate_options({CONF_MAX_RECIPIENTS: 50.0, CONF_MAX_SEND_PER_DAY: 500, CONF_MAX_DELETE_PER_DAY: 10_000})
     assert errors == {}
     assert (options[CONF_MAX_RECIPIENTS], options[CONF_MAX_SEND_PER_DAY], options[CONF_MAX_DELETE_PER_DAY]) == (50, 500, 10_000)

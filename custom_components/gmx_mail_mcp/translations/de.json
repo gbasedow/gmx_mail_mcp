@@ -85,13 +85,21 @@
           "enabled_tools": "Eingeschaltete Tools",
           "max_attachment_mb": "Größenlimit für Anhänge und .eml",
           "max_upload_mb": "Größenlimit für Dateien beim Hochladen",
-          "allow_html_output": "HTML-Ausgabe erlauben"
+          "allow_html_output": "HTML-Ausgabe erlauben",
+          "allow_permanent_delete": "Endgültiges Löschen erlauben",
+          "max_delete_per_day": "Tageslimit für gelöschte Mails",
+          "tools_without_confirmation": "Tools ohne Bestätigung",
+          "audit_retention_days": "Audit-Log aufbewahren"
         },
         "data_description": {
           "enabled_tools": "Änderungen wirken sofort, ohne Neustart.",
           "max_attachment_mb": "Größte Datei, die gmx_get_attachment und gmx_get_raw_message liefern (1–10 MB). claude.ai nimmt je Antwort nur etwa 110 KB an, Claude Code bis zum Limit.",
           "max_upload_mb": "Größte Datei (und Summe aller Dateien) je Aufruf, die gmx_save_draft annimmt (1–20 MB). Das Modell muss die Datei als base64 ausgeben; große Dateien machen den Aufruf langsam.",
-          "allow_html_output": "Erlaubt gmx_get_message, bereinigtes HTML zu liefern (format html). Aus: nur Text."
+          "allow_html_output": "Erlaubt gmx_get_message, bereinigtes HTML zu liefern (format html). Aus: nur Text.",
+          "allow_permanent_delete": "Erlaubt gmx_delete_permanently, Mails im Papierkorb oder Spamordner endgültig zu löschen. Aus: nur Papierkorb.",
+          "max_delete_per_day": "Mails je Kalendertag, die gmx_trash und gmx_delete_permanently zusammen löschen dürfen. 0 = ohne Limit (Standard). Je Aufruf höchstens 50 Mails.",
+          "tools_without_confirmation": "Diese Tools handeln beim ersten Aufruf, ohne Vorschau und Bestätigungscode. Risiko: Eine einzige fehlgeleitete Anweisung löscht dann sofort. Standard: keine.",
+          "audit_retention_days": "Tage (1–365), die ein Audit-Eintrag aufbewahrt wird; höchstens 5000 Einträge. Einträge enthalten keine Mailinhalte, Betreffs oder Adressen."
         }
       }
     }
@@ -109,10 +117,11 @@
         "gmx_list_folders": "Lesen: Ordner auflisten (gmx_list_folders)",
         "gmx_search": "Lesen: Mails suchen (gmx_search)",
         "gmx_get_message": "Lesen: Mail lesen (gmx_get_message)",
-        "gmx_get_attachment": "Lesen: Anhang als Text oder Datei abrufen (gmx_get_attachment)",
         "gmx_get_raw_message": "Lesen: Mail als .eml herunterladen (gmx_get_raw_message)",
         "gmx_get_thread": "Lesen: Gesprächsverlauf anzeigen (gmx_get_thread)",
         "gmx_list_keywords": "Lesen: Schlagwörter auflisten (gmx_list_keywords)",
+        "gmx_get_attachment": "Lesen: Anhang als Text oder Datei abrufen (gmx_get_attachment)",
+        "gmx_get_audit_log": "Lesen: Audit-Log der schreibenden Aufrufe (gmx_get_audit_log)",
         "gmx_set_flags": "Organisieren: Markierungen und Schlagwörter setzen (gmx_set_flags)",
         "gmx_move": "Organisieren: Mails verschieben, nicht in den Papierkorb (gmx_move)",
         "gmx_copy": "Organisieren: Mails kopieren, nicht in den Papierkorb (gmx_copy)",
@@ -121,7 +130,16 @@
         "gmx_create_folder": "Organisieren: Ordner anlegen (gmx_create_folder)",
         "gmx_rename_folder": "Organisieren: Ordner umbenennen (gmx_rename_folder)",
         "gmx_subscribe_folder": "Organisieren: Ordner abonnieren/abbestellen (gmx_subscribe_folder)",
-        "gmx_save_draft": "Organisieren: Entwurf speichern, mit Anhängen; sendet nicht (gmx_save_draft)"
+        "gmx_save_draft": "Organisieren: Entwurf speichern, mit Anhängen; sendet nicht (gmx_save_draft)",
+        "gmx_trash": "Löschen: Mails in den Papierkorb (gmx_trash)",
+        "gmx_delete_permanently": "Löschen: Mails in Papierkorb/Spam endgültig löschen – braucht die Option unten (gmx_delete_permanently)",
+        "gmx_delete_folder": "Löschen: leere Ordner löschen (gmx_delete_folder)"
+      }
+    },
+    "tools_without_confirmation": {
+      "options": {
+        "gmx_delete_permanently": "Mails endgültig löschen ohne Bestätigung (gmx_delete_permanently)",
+        "gmx_delete_folder": "Leere Ordner löschen ohne Bestätigung (gmx_delete_folder)"
       }
     }
   },

@@ -85,13 +85,21 @@
           "enabled_tools": "Enabled tools",
           "max_attachment_mb": "Size limit for attachments and .eml",
           "max_upload_mb": "Size limit for uploaded files",
-          "allow_html_output": "Allow HTML output"
+          "allow_html_output": "Allow HTML output",
+          "allow_permanent_delete": "Allow permanent deletion",
+          "max_delete_per_day": "Daily limit for deleting mails",
+          "tools_without_confirmation": "Tools without confirmation",
+          "audit_retention_days": "Keep the audit log for"
         },
         "data_description": {
           "enabled_tools": "Changes apply immediately, without a restart.",
           "max_attachment_mb": "Largest file gmx_get_attachment and gmx_get_raw_message return (1–10 MB). claude.ai accepts only about 110 KB per answer; Claude Code up to the limit.",
           "max_upload_mb": "Largest file (and sum of all files) per call that gmx_save_draft accepts (1–20 MB). The model has to output the file as base64; large files make the call slow.",
-          "allow_html_output": "Lets gmx_get_message return cleaned HTML (format html). Off: text only."
+          "allow_html_output": "Lets gmx_get_message return cleaned HTML (format html). Off: text only.",
+          "allow_permanent_delete": "Lets gmx_delete_permanently remove mails in the trash or spam folder for good. Off: only the trash.",
+          "max_delete_per_day": "Mails per local day that gmx_trash and gmx_delete_permanently may delete together. 0 = no limit (default). Each call takes at most 50 mails.",
+          "tools_without_confirmation": "These tools act on the first call, without preview and confirmation code. Risk: a single misled instruction then deletes at once. Default: none.",
+          "audit_retention_days": "Days (1–365) an audit entry is kept; at most 5000 entries. Entries contain no mail content, subjects or addresses."
         }
       }
     }
@@ -109,10 +117,11 @@
         "gmx_list_folders": "Read: list folders (gmx_list_folders)",
         "gmx_search": "Read: search mail (gmx_search)",
         "gmx_get_message": "Read: read a mail (gmx_get_message)",
-        "gmx_get_attachment": "Read: get an attachment as text or file (gmx_get_attachment)",
         "gmx_get_raw_message": "Read: download a mail as .eml (gmx_get_raw_message)",
         "gmx_get_thread": "Read: show a conversation (gmx_get_thread)",
         "gmx_list_keywords": "Read: list keywords (gmx_list_keywords)",
+        "gmx_get_attachment": "Read: get an attachment as text or file (gmx_get_attachment)",
+        "gmx_get_audit_log": "Read: audit log of writing calls (gmx_get_audit_log)",
         "gmx_set_flags": "Organise: set flags and keywords (gmx_set_flags)",
         "gmx_move": "Organise: move mails, not into the trash (gmx_move)",
         "gmx_copy": "Organise: copy mails, not into the trash (gmx_copy)",
@@ -121,7 +130,16 @@
         "gmx_create_folder": "Organise: create folders (gmx_create_folder)",
         "gmx_rename_folder": "Organise: rename folders (gmx_rename_folder)",
         "gmx_subscribe_folder": "Organise: subscribe/unsubscribe folders (gmx_subscribe_folder)",
-        "gmx_save_draft": "Organise: save drafts, with attachments; does not send (gmx_save_draft)"
+        "gmx_save_draft": "Organise: save drafts, with attachments; does not send (gmx_save_draft)",
+        "gmx_trash": "Delete: move mails into the trash (gmx_trash)",
+        "gmx_delete_permanently": "Delete: delete mails in trash/spam for good – needs the option below (gmx_delete_permanently)",
+        "gmx_delete_folder": "Delete: delete empty folders (gmx_delete_folder)"
+      }
+    },
+    "tools_without_confirmation": {
+      "options": {
+        "gmx_delete_permanently": "Delete mails permanently without confirmation (gmx_delete_permanently)",
+        "gmx_delete_folder": "Delete empty folders without confirmation (gmx_delete_folder)"
       }
     }
   },

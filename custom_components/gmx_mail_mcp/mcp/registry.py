@@ -6,13 +6,20 @@ even while the entry is not loaded; the tool objects themselves are built per en
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
+import logging
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
+from ..audit import AuditLog, DeleteCounter
 from ..client.imap import Executor, ImapWorker
-from ..const import CONF_ENABLED_TOOLS, CONF_KNOWN_TOOLS, Permission
-from .protocol import Tool
+from ..confirm import ConfirmTokens
+from ..const import CONF_ENABLED_TOOLS, CONF_KNOWN_TOOLS, CONF_TOOLS_WITHOUT_CONFIRMATION, Permission
+from .protocol import REQUEST_USER, Tool, ToolResult
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def _run_inline[T](target: Callable[..., T], *args: Any) -> T:
@@ -32,6 +39,10 @@ class ToolContext:
     account: str = ""
     # Address of the account: the sender of drafts (GMX only accepts own addresses, GMX-NOTES row 21).
     email: str = ""
+    # Audit log of calls of level O/D/S (D41), deletions of the day (D39), confirmation codes (in memory only).
+    audit: AuditLog = field(default_factory=AuditLog)
+    deletes: DeleteCounter = field(default_factory=DeleteCounter)
+    tokens: ConfirmTokens = field(default_factory=ConfirmTokens)
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,17 +52,27 @@ class ToolSpec:
     name: str
     level: Permission
     build: Callable[[ToolContext], Tool]
+    # Two steps (preview + confirmation code) unless chosen in ``tools_without_confirmation`` (D45).
+    confirmable: bool = False
+
+
+def skips_confirmation(options: Mapping[str, Any], name: str) -> bool:
+    """Whether ``name`` runs without preview and code (D45); only confirmable tools can be chosen."""
+    chosen = options.get(CONF_TOOLS_WITHOUT_CONFIRMATION)
+    # Defined before the catalogue is built: tool modules import it.
+    return name in CONFIRMABLE_TOOLS and isinstance(chosen, list) and name in chosen
 
 
 def _specs() -> tuple[ToolSpec, ...]:
     # Imported here: tool modules import this module's ToolContext/ToolSpec.
-    from .tools import attachment, organize, read, status  # noqa: PLC0415
+    from .tools import attachment, audit_log, delete, organize, read, status  # noqa: PLC0415
 
-    return (status.SPEC, *read.SPECS, attachment.SPEC, *organize.SPECS)
+    return (status.SPEC, *read.SPECS, attachment.SPEC, audit_log.SPEC, *organize.SPECS, *delete.SPECS)
 
 
 TOOL_SPECS: tuple[ToolSpec, ...] = _specs()
 TOOL_NAMES: frozenset[str] = frozenset(spec.name for spec in TOOL_SPECS)
+CONFIRMABLE_TOOLS: tuple[str, ...] = tuple(spec.name for spec in TOOL_SPECS if spec.confirmable)
 
 
 def default_enabled_tools() -> list[str]:
@@ -98,13 +119,52 @@ def new_tool_names(options: Mapping[str, Any]) -> list[str]:
     return [spec.name for spec in TOOL_SPECS if spec.name not in known]
 
 
+def _audited(tool: Tool, audit: AuditLog) -> Tool:
+    """Record every call of a writing tool (D41): result, refusal, error, cancellation (also by the timeout)."""
+    inner = tool.handler
+
+    def _record(arguments: Any, facts: Mapping[str, Any]) -> None:
+        try:
+            audit.record(
+                tool=tool.name,
+                level=tool.level.value,
+                outcome=str(facts.get("outcome", "ok")),
+                arguments=arguments if isinstance(arguments, Mapping) else {},
+                count=facts.get("count"),
+                folders=facts.get("folders") or (),
+                user=REQUEST_USER.get(),
+                error=facts.get("error"),
+                confirmation=facts.get("confirmation"),
+            )
+        except Exception:
+            _LOGGER.exception("Audit entry for %s could not be written", tool.name)  # never fails the call itself
+
+    async def handler(arguments: dict[str, Any]) -> ToolResult:
+        try:
+            result = await inner(arguments)
+        except asyncio.CancelledError:
+            # Timeout or aborted request: the action may have run on the server anyway, so it is recorded.
+            _record(arguments, {"outcome": "cancelled"})
+            raise
+        except Exception:
+            _record(arguments, {"outcome": "internal_error"})
+            raise
+        facts = dict(result.audit or {})
+        if "outcome" not in facts:
+            facts["outcome"] = "error" if result.is_error else "ok"
+        _record(arguments, facts)
+        return result
+
+    return dataclasses.replace(tool, handler=handler)
+
+
 def build_tools(context: ToolContext) -> tuple[Tool, ...]:
-    """Build every tool for one entry, in catalogue order."""
+    """Build every tool for one entry, in catalogue order; tools of level O/D/S are audited (D41)."""
     tools = tuple(spec.build(context) for spec in TOOL_SPECS)
     for spec, tool in zip(TOOL_SPECS, tools, strict=True):
         if (tool.name, tool.level) != (spec.name, spec.level):
             raise ValueError(f"tool {tool.name} does not match its spec")
-    return tools
+    return tuple(tool if tool.level is Permission.READ else _audited(tool, context.audit) for tool in tools)
 
 
 def enabled_tools(tools: Iterable[Tool], options: Mapping[str, Any]) -> tuple[Tool, ...]:

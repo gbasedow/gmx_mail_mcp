@@ -20,7 +20,7 @@ from homeassistant.helpers.http import KEY_HASS, HomeAssistantView
 
 from .auth import AuthOutcome, async_unauthorized, authenticate
 from .const import DOMAIN
-from .mcp.protocol import SUPPORTED_PROTOCOL_VERSIONS, MessageKind, parse_error
+from .mcp.protocol import REQUEST_USER, SUPPORTED_PROTOCOL_VERSIONS, MessageKind, parse_error
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
@@ -60,7 +60,12 @@ class McpView(HomeAssistantView):
         except ValueError:  # JSONDecodeError and UnicodeDecodeError
             outcome = parse_error()
         else:
-            outcome = await entry.runtime_data.server.handle_message(message)
+            # The view admitted only the allowed user (D9), so this is the caller's id; the audit log records it (D41).
+            user_token = REQUEST_USER.set(entry.runtime_data.allowed_user_id)
+            try:
+                outcome = await entry.runtime_data.server.handle_message(message)
+            finally:
+                REQUEST_USER.reset(user_token)
 
         match outcome.kind:
             case MessageKind.ACCEPTED:

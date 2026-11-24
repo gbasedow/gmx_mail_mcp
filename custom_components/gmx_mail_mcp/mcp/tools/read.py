@@ -438,8 +438,8 @@ def _build_list_keywords(context: ToolContext) -> Tool:
         name="gmx_list_keywords",
         title="List GMX keywords",
         description=(
-            "Lists the keywords (custom flags) a folder announces and whether new keywords can be set. Keywords are not shown "
-            "in the GMX web mailer."
+            "Lists the keywords (custom flags) currently set on mails of a folder and whether new keywords can be set. GMX "
+            "reports only keywords in use: an empty folder shows none. Keywords are not shown in the GMX web mailer."
         ),
         input_schema={"type": "object", "properties": {"folder": _FOLDER_ARG}, "additionalProperties": False},
         level=Permission.READ,
