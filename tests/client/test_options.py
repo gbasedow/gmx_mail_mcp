@@ -26,6 +26,7 @@ from custom_components.gmx_mail_mcp.const import (
 )
 from custom_components.gmx_mail_mcp.options import (
     OPTION_SECTIONS,
+    check_send_options,
     flatten,
     folder_overrides,
     is_valid_allowlist_entry,
@@ -37,12 +38,12 @@ from custom_components.gmx_mail_mcp.options import (
 
 
 def test_defaults_are_valid_and_restrictive() -> None:
-    """Default: read only, sending off, no allowlist (SPEC section 5)."""
+    """Default: read only, allowlist mode with an empty list - nothing can be sent (SPEC section 4.3, D46)."""
     options, errors = validate_options({})
     assert errors == {}
     assert options == DEFAULT_OPTIONS
     assert options[CONF_PERMISSIONS] == ["read"]
-    assert options[CONF_SEND_MODE] == "off"
+    assert options[CONF_SEND_MODE] == "allowlist"
     assert options[CONF_ALLOWLIST] == []
     assert options[CONF_SENT_COPY_MODE] == "append"
     assert options[CONF_ALLOW_HTML_OUTPUT] is False
@@ -65,7 +66,7 @@ def test_nest_flatten_roundtrip() -> None:
     [
         ("anna@example.org", True),
         ("*@example.org", True),
-        ("*", True),
+        ("*", False),  # "any address" is a mode of its own (D46)
         ("anna@localhost", False),
         ("anna", False),
         ("*@*.org", False),
@@ -76,7 +77,7 @@ def test_nest_flatten_roundtrip() -> None:
     ],
 )
 def test_allowlist_entries(entry: str, valid: bool) -> None:
-    """Only exact addresses, *@domain and * are accepted."""
+    """Only exact addresses and *@domain are accepted."""
     assert is_valid_allowlist_entry(entry) is valid
 
 
@@ -94,14 +95,12 @@ def test_allowlist_normalisation() -> None:
         ({CONF_PERMISSIONS: ["read", "admin"]}, "invalid_permission"),
         ({CONF_SEND_MODE: "everything"}, "invalid_send_mode"),
         ({CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: ["not-an-address"]}, "invalid_allowlist_entry"),
-        ({CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: ["*"]}, "wildcard_requires_any"),
-        ({CONF_SEND_MODE: "off", CONF_ALLOWLIST: ["*"]}, "wildcard_requires_any"),
-        ({CONF_SEND_MODE: "any", CONF_ALLOWLIST: []}, "any_requires_wildcard"),
-        ({CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["a@b.de"]}, "any_requires_wildcard"),
+        ({CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: ["*"]}, "wildcard_not_allowed"),
+        ({CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["*"]}, "wildcard_not_allowed"),
         ({CONF_SENT_COPY_MODE: "twice"}, "invalid_sent_copy_mode"),
         ({CONF_MAX_RECIPIENTS: 0}, "out_of_range"),
         ({CONF_MAX_DELETE_PER_DAY: -5}, "out_of_range"),
-        ({CONF_MAX_SEND_PER_DAY: 0}, "out_of_range"),
+        ({CONF_MAX_SEND_PER_DAY: -1}, "out_of_range"),
         ({CONF_IDLE_RENEW_MINUTES: 26}, "out_of_range"),
         ({CONF_POLL_INTERVAL: "fast"}, "out_of_range"),
     ],
@@ -113,11 +112,13 @@ def test_invalid_options(changes: dict[str, Any], error: str) -> None:
 
 
 def test_valid_send_configurations() -> None:
-    """Allowlist mode with an empty list is allowed (sending stays blocked); any needs '*'."""
+    """Allowlist mode with an empty list is allowed (sending stays blocked); any works with or without a stored list (D46)."""
     options, errors = validate_options({CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: []})
     assert errors == {}
-    options, errors = validate_options({CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["*"], CONF_PERMISSIONS: ["send", "read"]})
+    assert validate_options({CONF_SEND_MODE: "any", CONF_ALLOWLIST: []})[1] == {}
+    options, errors = validate_options({CONF_SEND_MODE: "any", CONF_ALLOWLIST: ["a@b.de"], CONF_PERMISSIONS: ["send", "read"]})
     assert errors == {}
+    assert options[CONF_ALLOWLIST] == ["a@b.de"]
     assert options[CONF_PERMISSIONS] == ["read", "send"]  # canonical order
 
 
@@ -153,4 +154,32 @@ def test_sending_options_m6() -> None:
     for bad in ('Evil" <x@evil.test>', "a" * 101, "Name\x00"):
         assert validate_options({CONF_SENDER_NAME: bad})[1] == {"base": "invalid_sender_name"}
     assert validate_options({CONF_MAX_MESSAGE_SIZE_MB: 101})[1] == {"base": "out_of_range"}
-    assert validate_options({CONF_MAX_RECIPIENTS_PER_HOUR: 0})[1] == {"base": "out_of_range"}
+    assert validate_options({CONF_MAX_RECIPIENTS_PER_HOUR: 0})[1] == {}  # 0 = no hourly limit (D48)
+    assert validate_options({CONF_MAX_RECIPIENTS_PER_HOUR: -1})[1] == {"base": "out_of_range"}
+    assert validate_options({CONF_MAX_SEND_PER_DAY: 0})[1] == {}  # 0 = no daily limit (D48)
+
+
+@pytest.mark.parametrize(
+    ("mode", "allowlist", "name", "errors"),
+    [
+        ("allowlist", "", "", {}),
+        ("any", "", "", {}),
+        ("any", "a@b.de", "", {}),
+        ("off", "", "", {CONF_SEND_MODE: "invalid_send_mode"}),  # not offered in the form (D46)
+        ("allowlist", "*", "", {CONF_ALLOWLIST: "wildcard_not_allowed"}),
+        ("any", "*", "", {CONF_ALLOWLIST: "wildcard_not_allowed"}),
+        ("allowlist", "anna@example.org\nkein-eintrag", "", {CONF_ALLOWLIST: "invalid_allowlist_entry"}),
+        ("allowlist", "", 'Evil" <x@evil.test>', {CONF_SENDER_NAME: "invalid_sender_name"}),
+    ],
+)
+def test_check_send_options_of_the_form(mode: str, allowlist: str, name: str, errors: dict[str, str]) -> None:
+    """The options form: two modes, no '*', addresses and *@domain one per line, safe sender name (D46, D52)."""
+    assert check_send_options(mode, allowlist, name)[1] == errors
+
+
+def test_check_send_options_normalises() -> None:
+    """Lines and commas split, lower case, duplicates removed; whitespace in the name collapsed."""
+    values, errors = check_send_options("allowlist", " Anna@Example.org\n*@Firma.de, anna@example.org ", "  Haus \n Assistent ")
+    assert errors == {}
+    assert values == {CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: ["anna@example.org", "*@firma.de"], CONF_SENDER_NAME: "Haus Assistent"}
+    assert check_send_options(None, None, None)[0] == {CONF_SEND_MODE: "allowlist", CONF_ALLOWLIST: [], CONF_SENDER_NAME: ""}

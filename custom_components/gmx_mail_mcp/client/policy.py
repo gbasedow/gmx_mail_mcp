@@ -1,7 +1,8 @@
-"""Who may receive mail (SPEC section 5, measure 2; DECISIONS Nr. 54-55) - pure functions, no I/O.
+"""Who may receive mail (SPEC section 4.3; D46, D47) - pure functions, no I/O.
 
-* send mode ``off``: nobody; ``allowlist``: exact addresses or ``*@domain`` (exact domain, no subdomains);
-  ``any``: everybody, but only if ``*`` was entered explicitly (checked in the options flow);
+* send mode ``allowlist``: exact addresses or ``*@domain`` (exact domain, no subdomains); an empty list allows nobody,
+  and a ``*`` entry is ignored here (the options flow refuses it: "any address" is a mode of its own);
+* ``any``: every address (the allowlist stays stored for switching back); ``off`` (template, not offered): nobody;
 * the option "allow replies to the sender" covers exactly the **From** address of the original message. A different
   Reply-To address (a classic phishing trick) and every further recipient of "reply all" must pass the allowlist.
 """
@@ -44,9 +45,14 @@ class RecipientPolicy:
     allow_reply_to_sender: bool
 
     @property
+    def entries(self) -> list[str]:
+        """Allowlist entries that count in mode ``allowlist`` (without ``*``)."""
+        return [e for e in self.allowlist if normalize_address(e) != ALLOWLIST_WILDCARD]
+
+    @property
     def sending_enabled(self) -> bool:
         """Return whether anything may be sent at all."""
-        return self.send_mode in (SendMode.ALLOWLIST, SendMode.ANY) and bool(self.allowlist)
+        return self.send_mode == SendMode.ANY or (self.send_mode == SendMode.ALLOWLIST and bool(self.entries))
 
     def blocked(self, recipients: Iterable[str], *, original_sender: str | None = None) -> list[str]:
         """Return the recipients that may not receive the message (empty list = all allowed).
@@ -55,13 +61,14 @@ class RecipientPolicy:
         """
         if not self.sending_enabled:
             return [normalize_address(r) for r in recipients]
+        if self.send_mode == SendMode.ANY:
+            return []
         sender = normalize_address(original_sender) if original_sender else None
+        entries = self.entries
         result: list[str] = []
         for recipient in recipients:
             addr = normalize_address(recipient)
-            if self.send_mode == SendMode.ANY and ALLOWLIST_WILDCARD in self.allowlist:
-                continue
-            if allowed_by_list(addr, self.allowlist):
+            if allowed_by_list(addr, entries):
                 continue
             if self.allow_reply_to_sender and sender is not None and addr == sender:
                 continue

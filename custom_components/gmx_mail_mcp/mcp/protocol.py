@@ -98,7 +98,8 @@ class Tool:
             "annotations": {
                 "title": self.title,
                 "readOnlyHint": self.level is Permission.READ,
-                "destructiveHint": self.level is Permission.DELETE,
+                # Sending cannot be undone either (D45 treats both alike).
+                "destructiveHint": self.level in (Permission.DELETE, Permission.SEND),
                 "openWorldHint": True,
             },
         }

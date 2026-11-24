@@ -59,6 +59,11 @@ def test_policy_modes_and_reply_exception() -> None:
     assert RecipientPolicy("off", ["anna@example.org"], True).blocked(["anna@example.org"]) == ["anna@example.org"]
     assert RecipientPolicy("allowlist", [], False).blocked(["a@b.de"]) == ["a@b.de"]
     assert RecipientPolicy("any", ["*"], False).blocked(["a@b.de"]) == []
+    # D46: "any" needs no "*" entry; in allowlist mode a stored "*" counts for nothing.
+    assert RecipientPolicy("any", [], False).blocked(["a@b.de"]) == []
+    assert RecipientPolicy("any", [], False).sending_enabled
+    assert RecipientPolicy("allowlist", ["*"], False).blocked(["a@b.de"]) == ["a@b.de"]
+    assert not RecipientPolicy("allowlist", ["*"], False).sending_enabled
     allow = RecipientPolicy("allowlist", ["anna@example.org"], True)
     assert allow.blocked(["shop@example.com"], original_sender="Shop@Example.com") == []
     # Reply-To differs from From (phishing pattern): the reply target is not covered by the exception.

@@ -19,7 +19,7 @@ from email.policy import SMTP, default
 from email.utils import formataddr, getaddresses, make_msgid
 from typing import Any
 
-from .errors import GmxMailError, GmxMessageNotFoundError, GmxMessageTooLargeError
+from .errors import GmxMessageNotFoundError, GmxMessageTooLargeError, GmxSendInputError
 from .imap import ImapSession, ServerInfo
 from .reader import MailRef, _check_uidvalidity, _find_key, _header_str, examine, get_attachment, get_message, parse_headers
 from .structure import attachments as list_attachments
@@ -73,12 +73,13 @@ class Outgoing:
 
     def preview(self, text_chars: int = 300) -> dict[str, Any]:
         """Recipients, subject, size, attachments and the start of the text (for the confirmation step)."""
-        body = self.message.get_body(preferencelist=("plain",))
-        text = body.get_content() if body is not None else ""
+        text = _content(self.message.get_body(preferencelist=("plain",)))
         files = [
             {"filename": part.get_filename(), "mime": part.get_content_type(), "size": len(part.get_payload(decode=True) or b"")}
             for part in self.message.iter_attachments()
         ]
+        html = self.message.get_body(preferencelist=("html",))
+        html_text = _content(html)
         return {
             "from": str(self.message["From"]),
             "to": _header_addresses(self.message, "To"),
@@ -89,7 +90,21 @@ class Outgoing:
             "attachments": files,
             "text_start": text[:text_chars],
             "text_chars": len(text),
+            # An HTML part is sent as well (D53); its size tells the person that there is more than the text.
+            "html": html is not None,
+            "html_chars": len(html_text),
         }
+
+
+def _content(part: Any) -> str:
+    """Text of a body part; empty if missing or undecodable (unknown charset in a draft from another program)."""
+    if part is None:
+        return ""
+    try:
+        content = part.get_content()
+    except LookupError, ValueError:
+        return ""
+    return content if isinstance(content, str) else ""
 
 
 def _header_addresses(message: EmailMessage, name: str) -> list[str]:
@@ -239,7 +254,7 @@ def reply_message(
     """Reply to the Reply-To address if present, else to From; with ``reply_all`` also to To/Cc (minus own address)."""
     targets = original.reply_to or ([original.from_addr] if original.from_addr else [])
     if not targets:
-        raise GmxMailError("original has no sender")
+        raise GmxSendInputError("no_reply_address")
     cc = _unique([*original.to, *original.cc], exclude=[sender, *targets]) if reply_all else []
     text = body_text
     if quote and original.text:
@@ -290,7 +305,7 @@ def load_draft(session: ImapSession, info: ServerInfo, ref: MailRef, *, sender: 
             raise GmxMessageNotFoundError("no such message")
         flags = {f.decode() if isinstance(f, bytes) else str(f) for f in meta.get(b"FLAGS", ())}
         if "\\Draft" not in flags:
-            raise GmxMailError("not a draft")
+            raise GmxSendInputError("not_a_draft")
         if int(meta.get(b"RFC822.SIZE", 0)) > max_bytes:
             raise GmxMessageTooLargeError("message_too_large")
         raw = _find_key(session.fetch([ref.uid], ["BODY.PEEK[]"]).get(ref.uid) or {}, b"BODY[")

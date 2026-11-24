@@ -298,7 +298,7 @@ _DRAFT_ARGS: Final = ("to", "cc", "bcc", "subject", "body_text", "in_reply_to", 
 _ATTACHMENT_KEYS: Final = ("filename", "content_base64", "sha256", "mime_type")
 
 
-def _addresses(args: Mapping[str, Any], key: str) -> list[str]:
+def get_addresses(args: Mapping[str, Any], key: str) -> list[str]:
     values = get_str_list(args, key, max_items=MAX_RECIPIENTS, max_len=MAX_ADDRESS)
     try:
         parse_addresses(values)
@@ -307,7 +307,7 @@ def _addresses(args: Mapping[str, Any], key: str) -> list[str]:
     return values
 
 
-def _uploads(args: Mapping[str, Any]) -> list[Upload]:
+def get_uploads(args: Mapping[str, Any]) -> list[Upload]:
     value = args.get("attachments")
     if value is None:
         return []
@@ -326,7 +326,7 @@ def _uploads(args: Mapping[str, Any]) -> list[Upload]:
     return uploads
 
 
-_UPLOAD_MESSAGES: Final = {
+UPLOAD_MESSAGES: Final = {
     "sha256_mismatch": "The SHA-256 does not match the decoded content; the file was changed on the way. Send it again.",
     "invalid_sha256": "sha256 must be 64 hexadecimal characters of the file's SHA-256.",
     "invalid_base64": "content_base64 is not valid base64.",
@@ -340,7 +340,7 @@ def _build_save_draft(context: ToolContext) -> Tool:
     @tool_errors
     async def handler(args: dict[str, Any]) -> ToolResult:
         check_keys(args, _DRAFT_ARGS)
-        to, cc, bcc = _addresses(args, "to"), _addresses(args, "cc"), _addresses(args, "bcc")
+        to, cc, bcc = get_addresses(args, "to"), get_addresses(args, "cc"), get_addresses(args, "bcc")
         subject = get_str(args, "subject", max_len=MAX_SUBJECT)
         if subject is not None and any(ch in subject for ch in "\r\n\x00"):
             raise ToolInputError("subject must be a single line")
@@ -348,14 +348,14 @@ def _build_save_draft(context: ToolContext) -> Tool:
         if not isinstance(body, str) or len(body) > MAX_BODY:
             raise ToolInputError(f"body_text must be a string of at most {MAX_BODY} characters")
         in_reply_to: MailRef | None = get_ref(args, "in_reply_to") if args.get("in_reply_to") is not None else None
-        uploads = _uploads(args)
+        uploads = get_uploads(args)
         if not context.email:
             return error_result("no_sender", "The account address is unknown; reload the integration.")
         limit = int(context.options().get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB)) * 1024 * 1024
         try:
             files, warnings = await context.executor(lambda: decode_uploads(uploads, max_bytes=limit)) if uploads else ([], [])
         except UploadError as err:
-            return error_result(err.code, _UPLOAD_MESSAGES.get(err.code, "The file was refused."), index=err.index)
+            return error_result(err.code, UPLOAD_MESSAGES.get(err.code, "The file was refused."), index=err.index)
         draft = DraftInput(
             sender=context.email,
             to=to,

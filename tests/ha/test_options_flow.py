@@ -98,6 +98,16 @@ async def test_switches_apply_without_reload(
         CONF_ALLOW_PERMANENT_DELETE: False,
         CONF_MAX_DELETE_PER_DAY: 0,
         CONF_TOOLS_WITHOUT_CONFIRMATION: [],
+        # M5 (D46-D54): allowlist mode with an empty list (nothing can be sent), template limits, copy in Sent.
+        "send_mode": "allowlist",
+        "allowlist": [],
+        "allow_reply_to_sender": False,
+        "sender_name": "",
+        "sent_copy_mode": "append",
+        "max_recipients": 10,
+        "max_send_per_day": 20,
+        "max_recipients_per_hour": 10,
+        "max_message_size_mb": 20,
         CONF_AUDIT_RETENTION_DAYS: 90,
     }
     assert entry.runtime_data.worker is worker  # no reload, connection kept

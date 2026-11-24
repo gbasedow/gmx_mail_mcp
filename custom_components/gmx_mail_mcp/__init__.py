@@ -20,7 +20,9 @@ from .client.errors import GmxAuthError, GmxMailError, GmxTlsError
 from .client.imap import ConnectionLimiter, ImapWorker
 from .connection import (
     async_create_auth_issue,
+    async_create_smtp_auth_issue,
     async_delete_auth_issue,
+    async_delete_smtp_auth_issue,
     async_update_new_tools_issue,
     create_tls_context,
     imap_settings_from_data,
@@ -81,8 +83,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
 
     entry.async_on_unload(async_track_time_interval(hass, _close_if_idle, timedelta(seconds=IDLE_CHECK_INTERVAL_S)))
 
+    @callback
+    def _smtp_auth_failed() -> None:
+        # The sending tools hit a rejected SMTP login: same app password as IMAP, so ask for a new one.
+        _LOGGER.warning("GMX rejected the SMTP login; the app password may have been revoked")
+        async_create_smtp_auth_issue(hass, entry)
+        entry.async_start_reauth(hass)
+
     integration = await async_get_integration(hass, DOMAIN)
     ledgers = await async_load_ledgers(hass, entry.entry_id, lambda: entry.options)
+    smtp_settings = smtp_settings_from_data(entry.data)
+    async_delete_smtp_auth_issue(hass, entry)
     tools = build_tools(
         ToolContext(
             worker=worker,
@@ -92,6 +103,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
             email=entry.data[CONF_EMAIL],
             audit=ledgers.audit,
             deletes=ledgers.deletes,
+            smtp=smtp_settings,
+            tls_context=create_tls_context,  # blocking; the sending tools call it in the executor
+            sends=ledgers.sends,
+            on_smtp_auth_failed=_smtp_auth_failed,
         )
     )
     server = McpServer(
@@ -112,7 +127,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -
         allowed_user_id=entry.data[CONF_ALLOWED_USER],
         worker=worker,
         limiter=limiter,
-        smtp_settings=smtp_settings_from_data(entry.data),
+        smtp_settings=smtp_settings,
         ledgers=ledgers,
     )
     return True
@@ -126,5 +141,5 @@ async def async_unload_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: GmxMailMcpConfigEntry) -> None:
-    """Delete the audit log and the delete counter of a removed account (D42)."""
+    """Delete the audit log and the counters of a removed account (D42)."""
     await async_remove_ledgers(hass, entry.entry_id)

@@ -1,7 +1,8 @@
 """Config, reauth, reconfigure and options flows.
 
 Config flow: address, app password, allowed HA user (D9), server settings (GMX defaults, collapsed). IMAP and SMTP
-logins are checked before the entry is created. Options flow: connection URL (D22) and the tool switches (D12).
+logins are checked before the entry is created. Options flow: connection URL (D22), tool switches (D12) and the settings
+of the levels (deleting M4, sending M5).
 """
 
 from __future__ import annotations
@@ -38,7 +39,9 @@ from .const import (
     AUDIT_RETENTION_MIN_DAYS,
     CONF_ALLOW_HTML_OUTPUT,
     CONF_ALLOW_PERMANENT_DELETE,
+    CONF_ALLOW_REPLY_TO_SENDER,
     CONF_ALLOWED_USER,
+    CONF_ALLOWLIST,
     CONF_AUDIT_RETENTION_DAYS,
     CONF_EMAIL,
     CONF_ENABLED_TOOLS,
@@ -48,8 +51,15 @@ from .const import (
     CONF_KNOWN_TOOLS,
     CONF_MAX_ATTACHMENT_MB,
     CONF_MAX_DELETE_PER_DAY,
+    CONF_MAX_MESSAGE_SIZE_MB,
+    CONF_MAX_RECIPIENTS,
+    CONF_MAX_RECIPIENTS_PER_HOUR,
+    CONF_MAX_SEND_PER_DAY,
     CONF_MAX_UPLOAD_MB,
     CONF_PASSWORD,
+    CONF_SEND_MODE,
+    CONF_SENDER_NAME,
+    CONF_SENT_COPY_MODE,
     CONF_SMTP_HOST,
     CONF_SMTP_PORT,
     CONF_SMTP_SECURITY,
@@ -59,17 +69,25 @@ from .const import (
     DEFAULT_IMAP_PORT,
     DEFAULT_IMAP_SECURITY,
     DEFAULT_MAX_ATTACHMENT_MB,
+    DEFAULT_MAX_MESSAGE_SIZE_MB,
+    DEFAULT_MAX_RECIPIENTS,
+    DEFAULT_MAX_RECIPIENTS_PER_HOUR,
+    DEFAULT_MAX_SEND_PER_DAY,
     DEFAULT_MAX_UPLOAD_MB,
     DEFAULT_SMTP_HOST,
     DEFAULT_SMTP_PORT,
     DEFAULT_SMTP_SECURITY,
     DOMAIN,
     MAX_ATTACHMENT_MB,
+    MAX_MESSAGE_SIZE_MB,
     MAX_UPLOAD_MB,
     SECTION_SERVER,
     Security,
+    SendMode,
+    SentCopyMode,
 )
 from .mcp.registry import CONFIRMABLE_TOOLS, TOOL_SPECS, enabled_tool_names, new_tool_names
+from .options import FORM_SEND_MODES, check_send_options
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -266,9 +284,99 @@ def _int_option(value: Any, default: int, low: int, high: int | None) -> int:
     return number if high is None else min(high, number)
 
 
+def _number(low: int, high: int | None = None, unit: str = "") -> Any:
+    if high is None:
+        config = NumberSelectorConfig(min=low, step=1, mode=NumberSelectorMode.BOX)
+    else:
+        config = NumberSelectorConfig(min=low, max=high, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement=unit)
+    return probatio.All(NumberSelector(config), probatio.Coerce(int))
+
+
+def _options_schema() -> probatio.Schema:
+    return probatio.Schema(
+        {
+            probatio.Optional(CONF_ENABLED_TOOLS): SelectSelector(
+                SelectSelectorConfig(
+                    options=[spec.name for spec in TOOL_SPECS],
+                    multiple=True,
+                    mode=SelectSelectorMode.LIST,
+                    translation_key=CONF_ENABLED_TOOLS,
+                )
+            ),
+            probatio.Required(CONF_MAX_ATTACHMENT_MB, default=DEFAULT_MAX_ATTACHMENT_MB): _number(1, MAX_ATTACHMENT_MB, "MB"),
+            probatio.Required(CONF_MAX_UPLOAD_MB, default=DEFAULT_MAX_UPLOAD_MB): _number(1, MAX_UPLOAD_MB, "MB"),
+            probatio.Required(CONF_ALLOW_HTML_OUTPUT, default=False): BooleanSelector(),
+            probatio.Required(CONF_ALLOW_PERMANENT_DELETE, default=False): BooleanSelector(),
+            probatio.Required(CONF_MAX_DELETE_PER_DAY, default=0): _number(0),
+            probatio.Optional(CONF_TOOLS_WITHOUT_CONFIRMATION): SelectSelector(
+                SelectSelectorConfig(
+                    options=list(CONFIRMABLE_TOOLS),
+                    multiple=True,
+                    mode=SelectSelectorMode.LIST,
+                    translation_key=CONF_TOOLS_WITHOUT_CONFIRMATION,
+                )
+            ),
+            # Sending (M5, D46-D54).
+            probatio.Required(CONF_SEND_MODE, default=SendMode.ALLOWLIST.value): SelectSelector(
+                SelectSelectorConfig(options=list(FORM_SEND_MODES), mode=SelectSelectorMode.LIST, translation_key=CONF_SEND_MODE)
+            ),
+            probatio.Optional(CONF_ALLOWLIST): TextSelector(TextSelectorConfig(multiline=True)),
+            probatio.Required(CONF_ALLOW_REPLY_TO_SENDER, default=False): BooleanSelector(),
+            probatio.Optional(CONF_SENDER_NAME): TextSelector(),
+            probatio.Required(CONF_SENT_COPY_MODE, default=SentCopyMode.APPEND.value): SelectSelector(
+                SelectSelectorConfig(
+                    options=[m.value for m in SentCopyMode], mode=SelectSelectorMode.DROPDOWN, translation_key=CONF_SENT_COPY_MODE
+                )
+            ),
+            probatio.Required(CONF_MAX_RECIPIENTS, default=DEFAULT_MAX_RECIPIENTS): _number(1),
+            probatio.Required(CONF_MAX_SEND_PER_DAY, default=DEFAULT_MAX_SEND_PER_DAY): _number(0),
+            probatio.Required(CONF_MAX_RECIPIENTS_PER_HOUR, default=DEFAULT_MAX_RECIPIENTS_PER_HOUR): _number(0),
+            probatio.Required(CONF_MAX_MESSAGE_SIZE_MB, default=DEFAULT_MAX_MESSAGE_SIZE_MB): _number(1, MAX_MESSAGE_SIZE_MB, "MB"),
+            probatio.Required(CONF_AUDIT_RETENTION_DAYS, default=DEFAULT_AUDIT_RETENTION_DAYS): _number(
+                AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS, "d"
+            ),
+        }
+    )
+
+
+def _allowlist_text(value: Any) -> str:
+    """Stored list -> one entry per line for the form."""
+    if isinstance(value, list):
+        return "\n".join(str(v) for v in value)
+    return str(value or "")
+
+
+def _suggested(options: Mapping[str, Any]) -> dict[str, Any]:
+    send_mode = str(options.get(CONF_SEND_MODE, SendMode.ALLOWLIST.value))
+    copy_mode = str(options.get(CONF_SENT_COPY_MODE, SentCopyMode.APPEND.value))
+    return {
+        CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in enabled_tool_names(options)],
+        CONF_MAX_ATTACHMENT_MB: int(options.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB)),
+        CONF_MAX_UPLOAD_MB: int(options.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB)),
+        CONF_ALLOW_HTML_OUTPUT: bool(options.get(CONF_ALLOW_HTML_OUTPUT, False)),
+        CONF_ALLOW_PERMANENT_DELETE: bool(options.get(CONF_ALLOW_PERMANENT_DELETE, False)),
+        CONF_MAX_DELETE_PER_DAY: _int_option(options.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
+        CONF_TOOLS_WITHOUT_CONFIRMATION: [n for n in CONFIRMABLE_TOOLS if n in (options.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())],
+        # A stored "off" (template) is shown as the allowlist mode; saving turns it into that.
+        CONF_SEND_MODE: send_mode if send_mode in FORM_SEND_MODES else SendMode.ALLOWLIST.value,
+        CONF_ALLOWLIST: _allowlist_text(options.get(CONF_ALLOWLIST)),
+        CONF_ALLOW_REPLY_TO_SENDER: bool(options.get(CONF_ALLOW_REPLY_TO_SENDER, False)),
+        CONF_SENDER_NAME: str(options.get(CONF_SENDER_NAME) or ""),
+        CONF_SENT_COPY_MODE: copy_mode if copy_mode in {m.value for m in SentCopyMode} else SentCopyMode.APPEND.value,
+        CONF_MAX_RECIPIENTS: _int_option(options.get(CONF_MAX_RECIPIENTS), DEFAULT_MAX_RECIPIENTS, 1, None),
+        CONF_MAX_SEND_PER_DAY: _int_option(options.get(CONF_MAX_SEND_PER_DAY), DEFAULT_MAX_SEND_PER_DAY, 0, None),
+        CONF_MAX_RECIPIENTS_PER_HOUR: _int_option(options.get(CONF_MAX_RECIPIENTS_PER_HOUR), DEFAULT_MAX_RECIPIENTS_PER_HOUR, 0, None),
+        CONF_MAX_MESSAGE_SIZE_MB: _int_option(options.get(CONF_MAX_MESSAGE_SIZE_MB), DEFAULT_MAX_MESSAGE_SIZE_MB, 1, MAX_MESSAGE_SIZE_MB),
+        CONF_AUDIT_RETENTION_DAYS: _int_option(
+            options.get(CONF_AUDIT_RETENTION_DAYS), DEFAULT_AUDIT_RETENTION_DAYS, AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS
+        ),
+    }
+
+
 class GmxMailMcpOptionsFlow(OptionsFlow):
     """Connection URL (D22), tool switches (D12), new tools (D31), size limits (D14, D17), HTML output (D29), deleting
-    (permanent deletion, daily limit D39, tools without confirmation D45) and audit retention (D42).
+    (permanent deletion, daily limit D39, tools without confirmation D45), sending (mode and allowlist D46, replies to
+    the sender D47, limits D48, Sent copy D49, sender name D52, message size D54) and audit retention (D42).
 
     All take effect at once. Saving records the tools of this version (``known_tools``), so tools of a later update can
     be shown as new.
@@ -277,100 +385,20 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Show the URL and the settings."""
         options = self.config_entry.options
+        errors: dict[str, str] = {}
         if user_input is not None:
-            chosen = set(user_input.get(CONF_ENABLED_TOOLS) or ())
-            # Catalogue order; names the selector does not offer cannot get in.
-            enabled = [spec.name for spec in TOOL_SPECS if spec.name in chosen]
-            limit = min(MAX_ATTACHMENT_MB, max(1, int(user_input.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB))))
-            upload = min(MAX_UPLOAD_MB, max(1, int(user_input.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB))))
-            skipped = set(user_input.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())
-            return self.async_create_entry(
-                data={
-                    **options,
-                    CONF_ENABLED_TOOLS: enabled,
-                    CONF_KNOWN_TOOLS: [spec.name for spec in TOOL_SPECS],
-                    CONF_MAX_ATTACHMENT_MB: limit,
-                    CONF_MAX_UPLOAD_MB: upload,
-                    CONF_ALLOW_HTML_OUTPUT: bool(user_input.get(CONF_ALLOW_HTML_OUTPUT, False)),
-                    CONF_ALLOW_PERMANENT_DELETE: bool(user_input.get(CONF_ALLOW_PERMANENT_DELETE, False)),
-                    CONF_MAX_DELETE_PER_DAY: _int_option(user_input.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
-                    # Only tools with a confirmation step can be chosen (D45).
-                    CONF_TOOLS_WITHOUT_CONFIRMATION: [name for name in CONFIRMABLE_TOOLS if name in skipped],
-                    CONF_AUDIT_RETENTION_DAYS: _int_option(
-                        user_input.get(CONF_AUDIT_RETENTION_DAYS),
-                        DEFAULT_AUDIT_RETENTION_DAYS,
-                        AUDIT_RETENTION_MIN_DAYS,
-                        AUDIT_RETENTION_MAX_DAYS,
-                    ),
-                }
+            sending, errors = check_send_options(
+                user_input.get(CONF_SEND_MODE), user_input.get(CONF_ALLOWLIST), user_input.get(CONF_SENDER_NAME)
             )
+            if not errors:
+                return self.async_create_entry(data=self._options_from(user_input, sending))
 
         url = connection_url(self.hass, self.config_entry.entry_id)
-        schema = probatio.Schema(
-            {
-                probatio.Optional(CONF_ENABLED_TOOLS): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[spec.name for spec in TOOL_SPECS],
-                        multiple=True,
-                        mode=SelectSelectorMode.LIST,
-                        translation_key=CONF_ENABLED_TOOLS,
-                    )
-                ),
-                probatio.Required(CONF_MAX_ATTACHMENT_MB, default=DEFAULT_MAX_ATTACHMENT_MB): probatio.All(
-                    NumberSelector(
-                        NumberSelectorConfig(min=1, max=MAX_ATTACHMENT_MB, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="MB")
-                    ),
-                    probatio.Coerce(int),
-                ),
-                probatio.Required(CONF_MAX_UPLOAD_MB, default=DEFAULT_MAX_UPLOAD_MB): probatio.All(
-                    NumberSelector(
-                        NumberSelectorConfig(min=1, max=MAX_UPLOAD_MB, step=1, mode=NumberSelectorMode.BOX, unit_of_measurement="MB")
-                    ),
-                    probatio.Coerce(int),
-                ),
-                probatio.Required(CONF_ALLOW_HTML_OUTPUT, default=False): BooleanSelector(),
-                probatio.Required(CONF_ALLOW_PERMANENT_DELETE, default=False): BooleanSelector(),
-                probatio.Required(CONF_MAX_DELETE_PER_DAY, default=0): probatio.All(
-                    NumberSelector(NumberSelectorConfig(min=0, step=1, mode=NumberSelectorMode.BOX)),
-                    probatio.Coerce(int),
-                ),
-                probatio.Optional(CONF_TOOLS_WITHOUT_CONFIRMATION): SelectSelector(
-                    SelectSelectorConfig(
-                        options=list(CONFIRMABLE_TOOLS),
-                        multiple=True,
-                        mode=SelectSelectorMode.LIST,
-                        translation_key=CONF_TOOLS_WITHOUT_CONFIRMATION,
-                    )
-                ),
-                probatio.Required(CONF_AUDIT_RETENTION_DAYS, default=DEFAULT_AUDIT_RETENTION_DAYS): probatio.All(
-                    NumberSelector(
-                        NumberSelectorConfig(
-                            min=AUDIT_RETENTION_MIN_DAYS,
-                            max=AUDIT_RETENTION_MAX_DAYS,
-                            step=1,
-                            mode=NumberSelectorMode.BOX,
-                            unit_of_measurement="d",
-                        )
-                    ),
-                    probatio.Coerce(int),
-                ),
-            }
-        )
-        suggested = {
-            CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in enabled_tool_names(options)],
-            CONF_MAX_ATTACHMENT_MB: int(options.get(CONF_MAX_ATTACHMENT_MB, DEFAULT_MAX_ATTACHMENT_MB)),
-            CONF_MAX_UPLOAD_MB: int(options.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB)),
-            CONF_ALLOW_HTML_OUTPUT: bool(options.get(CONF_ALLOW_HTML_OUTPUT, False)),
-            CONF_ALLOW_PERMANENT_DELETE: bool(options.get(CONF_ALLOW_PERMANENT_DELETE, False)),
-            CONF_MAX_DELETE_PER_DAY: _int_option(options.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
-            CONF_TOOLS_WITHOUT_CONFIRMATION: [n for n in CONFIRMABLE_TOOLS if n in (options.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())],
-            CONF_AUDIT_RETENTION_DAYS: _int_option(
-                options.get(CONF_AUDIT_RETENTION_DAYS), DEFAULT_AUDIT_RETENTION_DAYS, AUDIT_RETENTION_MIN_DAYS, AUDIT_RETENTION_MAX_DAYS
-            ),
-        }
+        suggested = _suggested(options) if user_input is None else {**_suggested(options), **user_input}
         return self.async_show_form(
             step_id="init",
-            data_schema=self.add_suggested_values_to_schema(schema, suggested),
+            data_schema=self.add_suggested_values_to_schema(_options_schema(), suggested),
+            errors=errors,
             description_placeholders={
                 "url": url,
                 "claude_code": claude_code_command(url),
@@ -378,3 +406,42 @@ class GmxMailMcpOptionsFlow(OptionsFlow):
                 "new_tools": ", ".join(f"`{name}`" for name in new_tool_names(options)) or "-",
             },
         )
+
+    def _options_from(self, user_input: Mapping[str, Any], sending: Mapping[str, Any]) -> dict[str, Any]:
+        options = self.config_entry.options
+        chosen = set(user_input.get(CONF_ENABLED_TOOLS) or ())
+        skipped = set(user_input.get(CONF_TOOLS_WITHOUT_CONFIRMATION) or ())
+        return {
+            **options,
+            # Catalogue order; names the selector does not offer cannot get in.
+            CONF_ENABLED_TOOLS: [spec.name for spec in TOOL_SPECS if spec.name in chosen],
+            CONF_KNOWN_TOOLS: [spec.name for spec in TOOL_SPECS],
+            CONF_MAX_ATTACHMENT_MB: _int_option(user_input.get(CONF_MAX_ATTACHMENT_MB), DEFAULT_MAX_ATTACHMENT_MB, 1, MAX_ATTACHMENT_MB),
+            CONF_MAX_UPLOAD_MB: _int_option(user_input.get(CONF_MAX_UPLOAD_MB), DEFAULT_MAX_UPLOAD_MB, 1, MAX_UPLOAD_MB),
+            CONF_ALLOW_HTML_OUTPUT: bool(user_input.get(CONF_ALLOW_HTML_OUTPUT, False)),
+            CONF_ALLOW_PERMANENT_DELETE: bool(user_input.get(CONF_ALLOW_PERMANENT_DELETE, False)),
+            CONF_MAX_DELETE_PER_DAY: _int_option(user_input.get(CONF_MAX_DELETE_PER_DAY), 0, 0, None),
+            # Only tools with a confirmation step can be chosen (D45).
+            CONF_TOOLS_WITHOUT_CONFIRMATION: [name for name in CONFIRMABLE_TOOLS if name in skipped],
+            **sending,
+            CONF_ALLOW_REPLY_TO_SENDER: bool(user_input.get(CONF_ALLOW_REPLY_TO_SENDER, False)),
+            CONF_SENT_COPY_MODE: (
+                str(user_input.get(CONF_SENT_COPY_MODE))
+                if user_input.get(CONF_SENT_COPY_MODE) in {m.value for m in SentCopyMode}
+                else SentCopyMode.APPEND.value
+            ),
+            CONF_MAX_RECIPIENTS: _int_option(user_input.get(CONF_MAX_RECIPIENTS), DEFAULT_MAX_RECIPIENTS, 1, None),
+            CONF_MAX_SEND_PER_DAY: _int_option(user_input.get(CONF_MAX_SEND_PER_DAY), DEFAULT_MAX_SEND_PER_DAY, 0, None),
+            CONF_MAX_RECIPIENTS_PER_HOUR: _int_option(
+                user_input.get(CONF_MAX_RECIPIENTS_PER_HOUR), DEFAULT_MAX_RECIPIENTS_PER_HOUR, 0, None
+            ),
+            CONF_MAX_MESSAGE_SIZE_MB: _int_option(
+                user_input.get(CONF_MAX_MESSAGE_SIZE_MB), DEFAULT_MAX_MESSAGE_SIZE_MB, 1, MAX_MESSAGE_SIZE_MB
+            ),
+            CONF_AUDIT_RETENTION_DAYS: _int_option(
+                user_input.get(CONF_AUDIT_RETENTION_DAYS),
+                DEFAULT_AUDIT_RETENTION_DAYS,
+                AUDIT_RETENTION_MIN_DAYS,
+                AUDIT_RETENTION_MAX_DAYS,
+            ),
+        }

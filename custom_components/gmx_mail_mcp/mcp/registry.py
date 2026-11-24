@@ -9,12 +9,14 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import logging
+import ssl
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..audit import AuditLog, DeleteCounter
+from ..audit import AuditLog, DeleteCounter, SendCounter
 from ..client.imap import Executor, ImapWorker
+from ..client.smtp import SmtpSettings
 from ..confirm import ConfirmTokens
 from ..const import CONF_ENABLED_TOOLS, CONF_KNOWN_TOOLS, CONF_TOOLS_WITHOUT_CONFIRMATION, Permission
 from .protocol import REQUEST_USER, Tool, ToolResult
@@ -43,6 +45,14 @@ class ToolContext:
     audit: AuditLog = field(default_factory=AuditLog)
     deletes: DeleteCounter = field(default_factory=DeleteCounter)
     tokens: ConfirmTokens = field(default_factory=ConfirmTokens)
+    # Sending (M5): SMTP settings (None = not configured), a TLS context factory (blocking, called in the executor),
+    # messages of the day and recipients of the last hour (D48), one send at a time per account, and what to do when
+    # GMX rejects the SMTP login (repair issue, reauth).
+    smtp: SmtpSettings | None = None
+    tls_context: Callable[[], ssl.SSLContext] = ssl.create_default_context
+    sends: SendCounter = field(default_factory=SendCounter)
+    send_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    on_smtp_auth_failed: Callable[[], None] = lambda: None
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,9 +75,9 @@ def skips_confirmation(options: Mapping[str, Any], name: str) -> bool:
 
 def _specs() -> tuple[ToolSpec, ...]:
     # Imported here: tool modules import this module's ToolContext/ToolSpec.
-    from .tools import attachment, audit_log, delete, organize, read, status  # noqa: PLC0415
+    from .tools import attachment, audit_log, delete, organize, read, send, status  # noqa: PLC0415
 
-    return (status.SPEC, *read.SPECS, attachment.SPEC, audit_log.SPEC, *organize.SPECS, *delete.SPECS)
+    return (status.SPEC, *read.SPECS, attachment.SPEC, audit_log.SPEC, *organize.SPECS, *delete.SPECS, *send.SPECS)
 
 
 TOOL_SPECS: tuple[ToolSpec, ...] = _specs()
@@ -135,6 +145,7 @@ def _audited(tool: Tool, audit: AuditLog) -> Tool:
                 user=REQUEST_USER.get(),
                 error=facts.get("error"),
                 confirmation=facts.get("confirmation"),
+                recipient_domains=facts.get("recipient_domains") or (),
             )
         except Exception:
             _LOGGER.exception("Audit entry for %s could not be written", tool.name)  # never fails the call itself

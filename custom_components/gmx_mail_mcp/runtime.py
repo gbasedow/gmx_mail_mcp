@@ -20,8 +20,8 @@ class RuntimeData:
     allowed_user_id: str  # the only HA user the endpoint admits (D9)
     worker: ImapWorker
     limiter: ConnectionLimiter
-    smtp_settings: SmtpSettings  # used from M5 (sending)
-    ledgers: Ledgers  # audit log and delete counter (M4)
+    smtp_settings: SmtpSettings  # sending (M5)
+    ledgers: Ledgers  # audit log, delete counter (M4), send counter (M5)
 
 
 type GmxMailMcpConfigEntry = ConfigEntry[RuntimeData]

@@ -66,7 +66,8 @@ class Permission(StrEnum):
 
 
 class SendMode(StrEnum):
-    """Send mode (SPEC section 5, measure 2)."""
+    """Send mode (SPEC section 4.3, D46): only the allowlist, or any address. ``off`` (from the template) is not offered
+    in the options flow; a stored ``off`` blocks every recipient."""
 
     OFF = "off"
     ALLOWLIST = "allowlist"
@@ -130,7 +131,8 @@ FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
     FolderRole.JUNK: CONF_FOLDER_JUNK,
 }
 
-# Limits (SPEC section 5, measure 5): defaults only, freely adjustable in the options flow (minimum 1).
+# Limits (SPEC section 5, measure 5): defaults only, freely adjustable in the options flow. Recipients per mail at least 1;
+# messages per day and recipients per hour: 0 = no limit (D48).
 # GMX does not publish its own sending limits (GMX-NOTES row 20); high values risk an account block.
 DEFAULT_MAX_RECIPIENTS: Final = 10
 DEFAULT_MAX_SEND_PER_DAY: Final = 20
@@ -159,7 +161,7 @@ ALLOWLIST_WILDCARD: Final = "*"
 
 DEFAULT_OPTIONS: Final[dict[str, object]] = {
     CONF_PERMISSIONS: [Permission.READ.value],
-    CONF_SEND_MODE: SendMode.OFF.value,
+    CONF_SEND_MODE: SendMode.ALLOWLIST.value,  # with an empty allowlist nothing can be sent (D46)
     CONF_ALLOWLIST: [],
     CONF_ALLOW_REPLY_TO_SENDER: False,
     CONF_ALLOW_PERMANENT_DELETE: False,
