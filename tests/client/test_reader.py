@@ -80,6 +80,18 @@ def _commands(server: FakeImapServer, name: str) -> list[tuple[Any, ...]]:
 # --------------------------------------------------------------------------- folders
 
 
+def test_list_folders_subscription_state(server: FakeImapServer) -> None:
+    """LSUB decides ``subscribed``; if LSUB fails, the field is left out instead of guessed."""
+    session = _session(server)
+    folder_map = map_special_folders(parse_folder_list(session.list_folders()))
+    server.subscribed = {"INBOX"}
+    by_path = {f["path"]: f for f in list_folders(session, _info(), folder_map, include_counts=False)}
+    assert by_path["INBOX"]["subscribed"] is True
+    assert by_path["Archiv"]["subscribed"] is False
+    server.lsub_error = IMAPClientError("LSUB failed")
+    assert all("subscribed" not in f for f in list_folders(session, _info(), folder_map, include_counts=False))
+
+
 def test_list_folders_with_roles_and_counts(server: FakeImapServer) -> None:
     """Roles come from the folder map; counts from STATUS; \\HasNoChildren is dropped."""
     session = _session(server)
@@ -97,6 +109,7 @@ def test_list_folders_with_roles_and_counts(server: FakeImapServer) -> None:
         "delimiter": "/",
         "flags": [],
         "selectable": True,
+        "subscribed": True,
         "messages": 3,
         "unseen": 2,
     }
@@ -323,7 +336,17 @@ def test_get_message_formats_and_reply_to(server: FakeImapServer) -> None:
     text = get_message(session, _info(), ref, body_format="text")
     assert text.text == "Plain body"
     assert text.headers["reply_to"] == ["other@evil.example"]
-    assert text.attachments == [{"part_id": "2", "filename": "Rechnung März.pdf", "mime": "application/pdf", "size": 21, "inline": False}]
+    assert text.attachments == [
+        {
+            "part_id": "2",
+            "filename": "Rechnung März.pdf",
+            "mime": "application/pdf",
+            "size_estimated": 14,  # 13-byte file; the fake wraps base64 with LF instead of CRLF, hence one byte high
+            "size_encoded": 21,
+            "encoding": "base64",
+            "inline": False,
+        }
+    ]
     html = get_message(session, _info(), ref, body_format="html_as_text")
     assert html.text == "Hallo"
     assert html.body_format == "html_as_text"

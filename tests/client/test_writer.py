@@ -15,18 +15,22 @@ from custom_components.gmx_mail_mcp.client.errors import (
     GmxInvalidFolderNameError,
     GmxMessageTooLargeError,
     GmxProtectedFolderError,
+    GmxProtectedTargetError,
     GmxUidValidityError,
     GmxUnsupportedError,
+    GmxWrongFolderError,
 )
 from custom_components.gmx_mail_mcp.client.folders import map_special_folders, parse_folder_list
 from custom_components.gmx_mail_mcp.client.imap import ImapSession, ServerInfo, parse_capabilities
 from custom_components.gmx_mail_mcp.client.reader import MailRef
+from custom_components.gmx_mail_mcp.client.upload import Attachment
 from custom_components.gmx_mail_mcp.client.writer import (
     DraftInput,
     build_draft,
     copy_or_move,
     create_folder,
     expand_uid_set,
+    mark_spam,
     normalize_flags,
     open_folder,
     parse_addresses,
@@ -35,6 +39,7 @@ from custom_components.gmx_mail_mcp.client.writer import (
     rename_folder,
     save_draft,
     set_flags,
+    set_subscription,
 )
 
 from .fakes import EMAIL, GMX_CAPABILITIES, FakeImapServer, plain_message
@@ -330,3 +335,77 @@ def test_save_draft_fallbacks_and_limits(server: FakeImapServer) -> None:
         save_draft(_session(server), GMX_INFO, map_special_folders([]), DraftInput(sender=EMAIL, body_text="x"))
     with pytest.raises(GmxUidValidityError):
         save_draft(_session(server), GMX_INFO, folder_map, DraftInput(sender=EMAIL, body_text="x", in_reply_to=MailRef("INBOX", 2, 1)))
+
+
+# --------------------------------------------------------------------------- M3: protected targets, spam, subscriptions
+
+
+def test_copy_or_move_refuses_forbidden_target(server: FakeImapServer) -> None:
+    """The trash is reserved for gmx_trash (level D): nothing is copied or moved there, the source stays untouched."""
+    for move in (True, False):
+        with pytest.raises(GmxProtectedTargetError):
+            copy_or_move(_session(server), GMX_INFO, _refs(1), "Gelöscht", move=move, forbidden_targets={"Gelöscht"})
+    assert sorted(server.mailbox("INBOX").messages) == [1, 2, 3]
+    assert not server.mailbox("Gelöscht").messages
+    assert not _cmds(server, "select")  # refused before any folder was opened
+
+
+def test_mark_spam_moves_with_keywords(server: FakeImapServer) -> None:
+    """Spam: $Junk set (and $NotJunk cleared) before the move into the junk folder; MOVE keeps the flags."""
+    folder_map = _folder_map(server)
+    result = mark_spam(_session(server), GMX_INFO, folder_map, _refs(2), spam=True)
+    assert result.count == 1
+    assert result.new_refs == [{"folder": "Spamverdacht", "uid": 1, "uidvalidity": 900}]
+    assert result.warnings == []
+    assert server.mailbox("Spamverdacht").messages[1].flags == (b"$Junk",)
+    assert 2 not in server.mailbox("INBOX").messages
+    with pytest.raises(GmxInvalidFolderNameError):
+        mark_spam(_session(server), GMX_INFO, folder_map, [MailRef("Spamverdacht", 1, 900)], spam=True)
+
+
+def test_mark_not_spam_only_from_junk(server: FakeImapServer) -> None:
+    """Not spam: only mail in the junk folder; it goes to the inbox with $NotJunk instead of $Junk."""
+    folder_map = _folder_map(server)
+    mark_spam(_session(server), GMX_INFO, folder_map, _refs(2), spam=True)
+    with pytest.raises(GmxWrongFolderError) as err:
+        mark_spam(_session(server), GMX_INFO, folder_map, _refs(1), spam=False)
+    assert err.value.reason == "not_in_junk"
+    result = mark_spam(_session(server), GMX_INFO, folder_map, [MailRef("Spamverdacht", 1, 900)], spam=False)
+    assert result.new_refs == [{"folder": "INBOX", "uid": 4, "uidvalidity": 777}]
+    assert server.mailbox("INBOX").messages[4].flags == (b"$NotJunk",)
+    assert not server.mailbox("Spamverdacht").messages
+
+
+def test_mark_spam_without_keywords_or_junk_folder(server: FakeImapServer) -> None:
+    """No \\* in PERMANENTFLAGS: moved anyway, with a warning; no junk folder: error before anything happens."""
+    server.permanent_flags = (b"\\Seen",)
+    result = mark_spam(_session(server), GMX_INFO, _folder_map(server), _refs(1), spam=True)
+    assert result.count == 1
+    assert result.warnings == ["keywords_not_supported"]
+    with pytest.raises(GmxFolderNotFoundError):
+        mark_spam(_session(server), GMX_INFO, map_special_folders([]), _refs(2), spam=True)
+    assert 2 in server.mailbox("INBOX").messages
+
+
+def test_set_subscription(server: FakeImapServer) -> None:
+    """SUBSCRIBE / UNSUBSCRIBE only for existing folders."""
+    set_subscription(_session(server), GMX_INFO, "Archiv", subscribed=False)
+    set_subscription(_session(server), GMX_INFO, "Archiv", subscribed=True)
+    assert _cmds(server, "unsubscribe") == [("unsubscribe", "Archiv")]
+    assert _cmds(server, "subscribe") == [("subscribe", "Archiv")]
+    with pytest.raises(GmxFolderNotFoundError):
+        set_subscription(_session(server), GMX_INFO, "Gibt es nicht", subscribed=True)
+
+
+def test_draft_with_attachments_and_german_reply_prefix(server: FakeImapServer) -> None:
+    """Attachments become MIME parts; an "AW:" subject is kept as it is (no "Re: AW:")."""
+    files = [Attachment("plan.pdf", b"%PDF-1.4 x", "application/pdf"), Attachment("notiz.txt", "Grüße".encode(), "text/plain")]
+    draft = DraftInput(sender=EMAIL, to=["anna@example.org"], subject="Mit Anhang", body_text="Hallo", attachments=files)
+    ref, _size = save_draft(_session(server), GMX_INFO, _folder_map(server), draft)
+    assert ref is not None
+    stored = message_from_bytes(server.appended[0], policy=policy.default)
+    assert stored.get_content_type() == "multipart/mixed"
+    parts = [(p.get_filename(), p.get_content_type(), p.get_payload(decode=True)) for p in stored.iter_attachments()]
+    assert parts == [("plan.pdf", "application/pdf", b"%PDF-1.4 x"), ("notiz.txt", "text/plain", "Grüße".encode())]
+    reply = build_draft(DraftInput(sender=EMAIL, body_text="x"), {"subject": "AW: Termin", "message-id": "<o@x>"})
+    assert reply["Subject"] == "AW: Termin"

@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import copy
-import mimetypes
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -25,24 +24,11 @@ from .imap import ImapSession, ServerInfo
 from .reader import MailRef, _check_uidvalidity, _find_key, _header_str, examine, get_attachment, get_message, parse_headers
 from .structure import attachments as list_attachments
 from .structure import parse_bodystructure
+from .upload import Attachment
 from .writer import parse_addresses
 
 MAX_QUOTE_CHARS = 20_000
 FORWARD_SEPARATOR = "---------- Weitergeleitete Nachricht ----------"
-
-
-@dataclass(slots=True)
-class Attachment:
-    """A file to attach."""
-
-    filename: str
-    content: bytes
-    mime: str = ""
-
-    def __post_init__(self) -> None:
-        """Guess the MIME type from the file name if none was given."""
-        if not self.mime:
-            self.mime = mimetypes.guess_type(self.filename)[0] or "application/octet-stream"
 
 
 @dataclass(slots=True)

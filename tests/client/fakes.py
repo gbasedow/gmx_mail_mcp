@@ -64,6 +64,9 @@ class FakeImapServer:
     broken_partial_fetch: bool = False
     commands: list[tuple[Any, ...]] = field(default_factory=list)
     appended: list[bytes] = field(default_factory=list)
+    # LSUB result; None = every folder is subscribed (GMX default). lsub_error makes LSUB fail.
+    subscribed: set[str] | None = None
+    lsub_error: BaseException | None = None
 
     def mailbox(self, name: str, uidvalidity: int | None = None) -> FakeMailbox:
         """Return (and create) a mailbox; an explicit ``uidvalidity`` is applied."""
@@ -136,6 +139,32 @@ class FakeIMAPClient:
         if self.server.list_error is not None:
             raise self.server.list_error
         return list(self.server.folders)
+
+    def list_sub_folders(self, directory: str = "", pattern: str = "*") -> list[tuple[tuple[bytes, ...], bytes, str]]:
+        """LSUB."""
+        self._check_open()
+        if self.server.lsub_error is not None:
+            raise self.server.lsub_error
+        wanted = self.server.subscribed
+        return [entry for entry in self.server.folders if wanted is None or entry[2] in wanted]
+
+    def subscribe_folder(self, folder: str) -> bytes:
+        """SUBSCRIBE."""
+        self._check_open()
+        self.server.commands.append(("subscribe", folder))
+        if self.server.subscribed is None:
+            self.server.subscribed = {name for _flags, _delim, name in self.server.folders}
+        self.server.subscribed.add(folder)
+        return b"OK"
+
+    def unsubscribe_folder(self, folder: str) -> bytes:
+        """UNSUBSCRIBE."""
+        self._check_open()
+        self.server.commands.append(("unsubscribe", folder))
+        if self.server.subscribed is None:
+            self.server.subscribed = {name for _flags, _delim, name in self.server.folders}
+        self.server.subscribed.discard(folder)
+        return b"OK"
 
     def noop(self) -> tuple[bytes, list[Any]]:
         """NOOP."""
