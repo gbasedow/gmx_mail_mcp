@@ -19,6 +19,8 @@ CONF_SMTP_PORT: Final = "smtp_port"
 CONF_SMTP_SECURITY: Final = "smtp_security"
 
 SECTION_SERVER: Final = "server"
+# HA user whose access tokens the MCP endpoint admits (D9); every other user gets 403.
+CONF_ALLOWED_USER: Final = "allowed_user"
 
 
 class Security(StrEnum):

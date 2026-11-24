@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MCP endpoint",
+        "description": "Only access tokens of the chosen Home Assistant user can use the endpoint. Create a dedicated user for this and generate the long-lived access token under that user.",
+        "data": {
+          "allowed_user": "Allowed user"
+        },
+        "data_description": {
+          "allowed_user": "Requests with a token of any other user are rejected (403)."
+        }
+      }
+    },
+    "abort": {
+      "no_users": "There is no active Home Assistant user to choose."
+    }
+  }
+}

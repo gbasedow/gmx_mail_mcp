@@ -1,0 +1,19 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "MCP-Endpunkt",
+        "description": "Nur Zugriffstoken des gewählten Home-Assistant-Benutzers können den Endpunkt nutzen. Lege dafür einen eigenen Benutzer an und erzeuge das langlebige Zugriffstoken unter diesem Benutzer.",
+        "data": {
+          "allowed_user": "Erlaubter Benutzer"
+        },
+        "data_description": {
+          "allowed_user": "Anfragen mit dem Token eines anderen Benutzers werden abgelehnt (403)."
+        }
+      }
+    },
+    "abort": {
+      "no_users": "Es gibt keinen aktiven Home-Assistant-Benutzer zur Auswahl."
+    }
+  }
+}
