@@ -10,9 +10,13 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from ..client.imap import ImapWorker
+from ..client.imap import Executor, ImapWorker
 from ..const import CONF_ENABLED_TOOLS, Permission
 from .protocol import Tool
+
+
+async def _run_inline[T](target: Callable[..., T], *args: Any) -> T:
+    return target(*args)
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +24,12 @@ class ToolContext:
     """What a tool may use. Grows with the milestones (SMTP, limits, audit)."""
 
     worker: ImapWorker
+    # Current entry options; read per call so that option changes apply without a reload.
+    options: Callable[[], Mapping[str, Any]] = dict
+    # Runs CPU-bound work (text extraction) outside the event loop; in HA: hass.async_add_executor_job.
+    executor: Executor = _run_inline
+    # Label of the mailbox in responses (entry title), so a model with several accounts can tell them apart (D11).
+    account: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,9 +43,9 @@ class ToolSpec:
 
 def _specs() -> tuple[ToolSpec, ...]:
     # Imported here: tool modules import this module's ToolContext/ToolSpec.
-    from .tools import status  # noqa: PLC0415
+    from .tools import attachment, read, status  # noqa: PLC0415
 
-    return (status.SPEC,)
+    return (status.SPEC, *read.SPECS, attachment.SPEC)
 
 
 TOOL_SPECS: tuple[ToolSpec, ...] = _specs()
