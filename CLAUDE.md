@@ -24,7 +24,9 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - **Übernommen (HA-frei, 313 Tests grün unter Python 3.14):** `client/` (IMAP-Worker, Reader, Writer, Deleter, Composer, SMTP, Sent,
   Policy, Sanitize, Structure, Folders, IDLE, Errors), `const.py`, `options.py`, `envelope.py`, `confirm.py`.
 - **M0 (Spike) vorhanden:** MCP-Endpunkt (eigene JSON-RPC-Schicht, D20) mit HA-Token und Benutzerprüfung (D9), Config-Flow nur mit Benutzerwahl, Spike-Tool; Bericht `docs/M0-SPIKE.md`.
-- **Noch nicht vorhanden (zu bauen):** Config-Flow mit Kontodaten (mehrere Konten, Tool-Schalter im Flow), Tool-Registry,
+- **M1 vorhanden:** Config-Flow mit Kontodaten (mehrere Konten, Benutzerwahl, Reauth, Reconfigure), Options-Flow mit Verbindungs-URL und Tool-Schaltern (D22, D23),
+  Verbindungsverwaltung (`ImapWorker`), Tool-Registry (`mcp/registry.py`), erstes Tool `gmx_get_status`. Bericht `docs/M1.md`.
+- **Noch nicht vorhanden (zu bauen):** Lese-, Organisier-, Lösch- und Sende-Tools,
   Anhang-Auslieferung (Text und Datei), Audit-Log. Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.

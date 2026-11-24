@@ -60,7 +60,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 ## 4. Sicherheit
 
 1. **Token:** nur gültige HA-Tokens, 401 sonst. Nur der gewählte HA-Benutzer (D9); Tokens anderer Benutzer werden mit 403 abgelehnt.
-2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus.
+2. **Einzelschalter je Tool.** Gespeichert in den Optionen des Config-Entry (`enabled_tools`), Voreinstellung: **nur Stufe R an**, alles andere aus. Gespeicherte Auswahl ist explizit; neue Tools aus Updates bleiben aus (D23).
    `tools/list` zeigt nur eingeschaltete Tools; `tools/call` auf ein ausgeschaltetes Tool wird abgelehnt, auch wenn der Client den Namen kennt.
    **Wichtig:** Schalter nicht als HA-Entitäten (`switch`) anlegen, wenn ein LLM über ha-mcp Zugriff auf `switch.turn_on` hat – es könnte sich sonst selbst
    Tools freischalten. Entscheidung D12: nur im Konfigurationsfluss.
