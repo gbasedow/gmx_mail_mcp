@@ -32,7 +32,7 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
   Audit-Log (`audit.py`, `storage.py`, Tool `gmx_get_audit_log`), optionales Tageslimit (D39), Abo neuer Ordner (D44). Bericht `docs/M4.md`.
 - **M5 vorhanden (0.0.7, Live-Test bestanden 24.11.2026):** 4 Sende-Tools (Stufe S) `gmx_send_message`, `gmx_reply`, `gmx_forward`, `gmx_send_draft` mit Vorschau + Code (je Tool abschaltbar, D45),
   Versandmodus Allowlist/beliebig (D46), Limits (D48), Gesendet-Kopie (D49), Versandzähler in `.storage`, Empfänger-Domains im Audit-Log (D55). Bericht `docs/M5.md`.
-- **M6 vorhanden (0.1.0, Live-Test der neuen Punkte und Release offen):** Löschen läuft nach Abbruch zu Ende (D61), Versandmodus sichtbar mit Reparaturhinweis (D60),
+- **M6 vorhanden (0.1.0, Live-Test bestanden 26.11.2026; GitHub-Release offen):** Löschen läuft nach Abbruch zu Ende (D61), Versandmodus sichtbar mit Reparaturhinweis (D60),
   Diagnose ohne Adressen (D63), Anfragegröße passend zum Upload-Limit (D65), Vorlagenreste entfernt (D64), deutsche Anleitung `README.md` (D66), `CHANGELOG.md`,
   Versionsprüfung in der CI (D67). Bericht `docs/M6.md`.
 - **Nicht vorhanden:** `.eml` hochladen (D34, D59: zurückgestellt), MCP `2026-07-28` (D68). Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:

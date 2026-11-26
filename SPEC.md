@@ -122,7 +122,7 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test bestanden – siehe `docs/M3.md`. |
 | M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test bestanden (mit 0.0.7) – siehe `docs/M4.md`. |
 | M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test bestanden – siehe `docs/M5.md`. |
-| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0 (erstes GitHub-Release, D57). **Stand 26.11.2026:** gebaut (0.1.0), Live-Test der neuen Punkte und Release offen – siehe `docs/M6.md`. |
+| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0 (erstes GitHub-Release, D57). **Stand 26.11.2026:** gebaut (0.1.0), gemergt, Live-Test bestanden; GitHub-Release offen – siehe `docs/M6.md`. |
 
 Je Meilenstein: Tests grün, Bericht, Freigabe des Nutzers.
 
