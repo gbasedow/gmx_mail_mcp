@@ -1,5 +1,7 @@
 # GMX Mail MCP
 
+<img src="custom_components/gmx_mail_mcp/brand/icon.png" alt="Logo" width="96" align="right">
+
 Home-Assistant-Integration, die ein GMX-Postfach als **MCP-Server** bereitstellt. Ein Sprachmodell (Claude in claude.ai,
 der Claude-App oder Claude Code) kann damit über IMAP und SMTP mit dem Postfach arbeiten: Ordner, Suche, Lesen, ganze
 Anhänge, Flags, Verschieben, Löschen, Entwürfe, Senden, Antworten, Weiterleiten.

@@ -19,6 +19,7 @@ Erstes Release (M6: Härtung, Anleitung, Release). Details: `docs/M6.md`.
 - Beim Entfernen eines Kontos verschwinden auch seine Reparaturhinweise.
 - Tote Reste der Vorlage (alte Optionsprüfung, Abschnitte, `permissions`, Abfrage-/IDLE-/Ereignis-Optionen) entfernt (D64).
 - README als deutsche Nutzeranleitung (D66); CI prüft, dass Manifest-Version, CHANGELOG und Tag übereinstimmen.
+- Logo aus `gmx_mail` übernommen (`brand/icon.png`, `icon@2x.png`; weißer Briefumschlag auf GMX-Blau, ohne GMX-Schriftzug, D69).
 
 ## Frühere Stände (ohne Release)
 
