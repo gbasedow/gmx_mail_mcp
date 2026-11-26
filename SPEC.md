@@ -49,7 +49,7 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Nam
 | `get_status`, `get_audit_log` | R | Verbindungs-/Kontostatus mit Capabilities (M2), Audit-Log (M4, D41) |
 | `get_thread`, `list_keywords` *(neu, M2)* | R | Gesprächsverlauf (ORDEREDSUBJECT), Schlagwörter eines Ordners (D28) |
 | `set_flags`, `move`, `copy`, `mark_spam`, `mark_not_spam` | O | Flags, Ordnerwechsel; Papierkorb als Ziel gesperrt (D32), Spam mit `$Junk`/`$NotJunk` (D33) – **M3** |
-| `create_folder`, `rename_folder`, `subscribe_folder` | O | Ordnerverwaltung, Abo (D34) – **M3**; neue Ordner werden abonniert, Umbenennen überträgt das Abo (D44, M4) |
+| `create_folder`, `rename_folder`, `subscribe_folder` | O | Ordnerverwaltung, Abo (D34) – **M3**; neue Ordner werden abonniert, Umbenennen überträgt das Abo (D44, M4); Unterordner auch unter Standardordnern, soweit der Server sie zulässt, nie unter dem Papierkorb (D70) |
 | `save_draft` | O | Entwurf per APPEND, Text und Anhänge (D35) – **M3** |
 | `trash` | D | In den Papierkorb, ohne Code (D38) – **M4** |
 | `delete_permanently`, `delete_folder` | D | endgültig nur mit Option; Ordner nur leer (D40); Vorschau + Bestätigungscode, je Tool abschaltbar (D45) – **M4** |

@@ -206,7 +206,11 @@ _ERRORS: tuple[tuple[type[Exception], str, str], ...] = (
         "Not allowed for these messages or this folder (see reason): permanent deletion only in trash or spam, "
         "trash only for mails outside the trash, folders only when empty and without subfolders.",
     ),
-    (GmxProtectedFolderError, "protected_folder", "INBOX and special folders cannot be renamed or get subfolders."),
+    (
+        GmxProtectedFolderError,
+        "protected_folder",
+        "INBOX and special folders cannot be renamed; the trash and folders the server marks as without subfolders get none.",
+    ),
     (GmxFolderExistsError, "folder_exists", "A folder with this name already exists."),
     (
         GmxInvalidFolderNameError,

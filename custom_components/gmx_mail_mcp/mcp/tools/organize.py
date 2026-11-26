@@ -212,9 +212,9 @@ def _build_create_folder(context: ToolContext) -> Tool:
         name="gmx_create_folder",
         title="Create a GMX folder",
         description=(
-            "Creates a folder, optionally below a parent folder; not below INBOX or the special folders (Sent, Drafts, "
-            "Trash, Spam), and subscribes it so mail programs show it. Names must not contain / % * or control characters "
-            "(at most 100 characters)."
+            "Creates a folder, optionally below a parent folder, and subscribes it so mail programs show it. Allowed below "
+            "INBOX and every folder the server lets have subfolders (at GMX not below Drafts, Sent and Spam); never below "
+            "the trash. Names must not contain / % * or control characters (at most 100 characters)."
         ),
         input_schema={
             "type": "object",
