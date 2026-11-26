@@ -13,7 +13,8 @@ Daily limit (D39): ``max_delete_per_day``, 0 = none; trash and permanent deletio
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import asyncio
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, Final
 
 from ...client.deleter import check_delete_folder, delete_folder, delete_permanently, preview_permanent, trash
@@ -21,7 +22,7 @@ from ...client.reader import MailRef
 from ...confirm import InvalidTokenError
 from ...const import CONF_ALLOW_PERMANENT_DELETE, CONF_MAX_DELETE_PER_DAY, MAX_DELETE_PER_CALL, Permission
 from ..protocol import Tool, ToolResult
-from ..registry import ToolContext, ToolSpec, skips_confirmation
+from ..registry import ToolContext, ToolSpec, run_to_end, skips_confirmation
 from .common import (
     MAX_FOLDER,
     REF_SCHEMA,
@@ -105,6 +106,14 @@ def _token_error() -> ToolResult:
     )
 
 
+async def _to_end(
+    context: ToolContext, tool: str, args: Mapping[str, Any], act: Callable[[dict[str, Any]], Awaitable[ToolResult]]
+) -> ToolResult:
+    """Run the deleting step so that a timeout of the call does not cut it off (D61, like D58 for sending)."""
+    task = asyncio.ensure_future(act({}))
+    return await run_to_end(context.audit, tool=tool, level=Permission.DELETE, arguments=args, task=task)
+
+
 # --------------------------------------------------------------------------- gmx_trash
 
 
@@ -116,14 +125,19 @@ def _build_trash(context: ToolContext) -> Tool:
         if (refused := _limit_error(context, len(refs))) is not None:
             return refused
         info, folder_map = await server_state(context)
-        target, result = await context.worker.async_run(lambda s: trash(s, info, folder_map, refs), readonly=False)
-        context.deletes.add(result.count)
-        data: dict[str, Any] = {"count": result.count, "folders": result.folders, "trash_folder": target}
-        if result.new_refs:
-            data["new_refs"] = result.new_refs
-        if result.missing:
-            data["missing"] = result.missing
-        return json_result(envelope(context.account, "trash", data, warnings=result.warnings))
+
+        @tool_errors
+        async def act(_args: dict[str, Any]) -> ToolResult:
+            target, result = await context.worker.async_run(lambda s: trash(s, info, folder_map, refs), readonly=False)
+            context.deletes.add(result.count)
+            data: dict[str, Any] = {"count": result.count, "folders": result.folders, "trash_folder": target}
+            if result.new_refs:
+                data["new_refs"] = result.new_refs
+            if result.missing:
+                data["missing"] = result.missing
+            return json_result(envelope(context.account, "trash", data, warnings=result.warnings))
+
+        return await _to_end(context, TRASH, args, act)
 
     return Tool(
         name=TRASH,
@@ -175,14 +189,19 @@ def _build_delete_permanently(context: ToolContext) -> Tool:
                 context.tokens.consume(token or "", DELETE_PERMANENTLY, params)
             except InvalidTokenError:
                 return _token_error()
-        result = await context.worker.async_run(lambda s: delete_permanently(s, info, folder_map, refs), readonly=False)
-        context.deletes.add(result.count)
         confirmation = "skipped" if skip else "code"
-        data = {"count": result.count, "folders": result.folders, "confirmation": confirmation}
-        if result.missing:
-            data["missing"] = result.missing
-        env = envelope(context.account, "delete_permanently", data, warnings=result.warnings)
-        return json_result(env, audit={"confirmation": confirmation})
+
+        @tool_errors
+        async def act(_args: dict[str, Any]) -> ToolResult:
+            result = await context.worker.async_run(lambda s: delete_permanently(s, info, folder_map, refs), readonly=False)
+            context.deletes.add(result.count)
+            data: dict[str, Any] = {"count": result.count, "folders": result.folders, "confirmation": confirmation}
+            if result.missing:
+                data["missing"] = result.missing
+            env = envelope(context.account, "delete_permanently", data, warnings=result.warnings)
+            return json_result(env, audit={"confirmation": confirmation})
+
+        return await _to_end(context, DELETE_PERMANENTLY, args, act)
 
     return Tool(
         name=DELETE_PERMANENTLY,
@@ -223,16 +242,23 @@ def _build_delete_folder(context: ToolContext) -> Tool:
                 "confirm_token": context.tokens.issue(DELETE_FOLDER, params),
                 "expires_in": context.tokens.ttl,
             }
-            return json_result(envelope(context.account, "delete_folder", data), audit={"outcome": "preview", "folders": [folder]})
+            return json_result(
+                envelope(context.account, "delete_folder", data), audit={"outcome": "preview", "count": 1, "folders": [folder]}
+            )
         if not skip:
             try:
                 context.tokens.consume(token or "", DELETE_FOLDER, params)
             except InvalidTokenError:
                 return _token_error()
-        deleted = await context.worker.async_run(lambda s: delete_folder(s, folder_map, folder), readonly=False)
         confirmation = "skipped" if skip else "code"
-        data = {"deleted_folder": deleted, "count": 1, "confirmation": confirmation}
-        return json_result(envelope(context.account, "delete_folder", data), audit={"confirmation": confirmation})
+
+        @tool_errors
+        async def act(_args: dict[str, Any]) -> ToolResult:
+            deleted = await context.worker.async_run(lambda s: delete_folder(s, folder_map, folder), readonly=False)
+            data = {"deleted_folder": deleted, "count": 1, "confirmation": confirmation}
+            return json_result(envelope(context.account, "delete_folder", data), audit={"confirmation": confirmation})
+
+        return await _to_end(context, DELETE_FOLDER, args, act)
 
     return Tool(
         name=DELETE_FOLDER,

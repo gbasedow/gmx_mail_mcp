@@ -69,15 +69,18 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
    „beliebige Adressen“; Option „Antworten an den Absender“ (nur From, Standard aus, D47); Empfänger je Mail, Mails pro Tag und Empfänger
    pro Stunde (Tag/Stunde mit 0 abschaltbar, D48), Gesamtgröße (D54); Vorschau + Bestätigungscode (aus der Vorlage: `client/policy.py`, `confirm.py`).
    Der Code erzwingt einen Zwischenschritt, ersetzt aber **keine** menschliche Freigabe; harte Grenze ist der Versandmodus mit der Allowlist.
-   Eine Mail geht höchstens einmal raus, auch bei unbekanntem Ausgang oder Zeitüberschreitung (D58).
+   Eine Mail geht höchstens einmal raus, auch bei unbekanntem Ausgang oder Zeitüberschreitung (D58). Vorschau und Antwort nennen den
+   Versandmodus; „Beliebige Adressen“ erzeugt die Warnung `recipients_unrestricted` und einen Reparaturhinweis (D60).
    Der Nutzer kann den Code **je Tool** im Optionsdialog abschalten (`tools_without_confirmation`, D45; Voreinstellung: überall an). Mit direktem MCP-Zugriff gibt es keine
    ha-mcp-Freigabe mehr – die Rückfrage übernimmt der Client (Claude fragt bei Connectoren standardmäßig vor Tool-Aufrufen).
 4. **Löschen:** Papierkorb zuerst; endgültig nur mit Option, nur Papierkorb/Spam, `UID EXPUNGE` genau dieser UIDs; höchstens 50 Mails je Aufruf.
-   Tageslimit optional (`max_delete_per_day`, Standard 0 = ohne, D39 ändert den ursprünglichen Entwurf).
+   Tageslimit optional (`max_delete_per_day`, Standard 0 = ohne, D39 ändert den ursprünglichen Entwurf). Ein begonnenes Löschen läuft nach
+   einer Zeitüberschreitung zu Ende und wird gezählt und protokolliert (D61).
 5. **Inhalte sind Daten:** Rahmen mit Zufallskennung, `content_trust`, Bereinigung versteckter Texte und unsichtbarer Zeichen (`client/sanitize.py`),
    Angriffssammlung als Test (`tests/client/test_injection_corpus.py`). Das gilt auch für Anhänge (§5).
-6. **Audit-Log** je Aufruf der Stufen O/D/S, auch Vorschau, Ablehnung, Fehler und Abbruch (Tool, Zeit, Benutzer, Ordnernamen, Anzahl, Fingerabdruck der Parameter, Ergebnis; keine Inhalte), D41; Aufbewahrung D42.
-7. Keine Zugangsdaten in Logs, Diagnose und Antworten. Fehler als JSON-RPC-Fehler bzw. `isError` mit Übersetzungsschlüssel.
+6. **Audit-Log** je Aufruf der Stufen O/D/S, auch Vorschau, Ablehnung, Fehler und Abbruch (Tool, Zeit, Benutzer, Ordnernamen, Anzahl, Fingerabdruck über Tool und Parameter (D62), Ergebnis; keine Inhalte), D41; Aufbewahrung D42.
+7. Keine Zugangsdaten in Logs, Diagnose und Antworten. Fehler als JSON-RPC-Fehler bzw. `isError` mit Übersetzungsschlüssel. Die Diagnose
+   enthält auch keine Kontoadresse, Benutzer-ID, Allowlist-Adressen oder Inhalte (D63).
 
 ## 5. Anhänge (Kernanforderung)
 
@@ -92,11 +95,13 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
   kein vollständiges Laden großer Nachrichten in den Speicher.
 - Hochladen (D17, umgesetzt in M3 für Entwürfe, `client/upload.py`): Dateien kommen als base64 im Tool-Aufruf (`attachments[]`: Name, MIME-Typ, Inhalt, SHA-256). Eigenes Upload-Limit (konfigurierbar, Standard 10 MB),
   Gesamtgröße der Nachricht gegen das Limit der Optionen und `APPENDLIMIT` prüfen. Dateiname bereinigen, Typ nach Inhalt prüfen.
+  HA nimmt je Anfrage 16 MiB an; für den zugelassenen Benutzer hebt der Endpunkt die Grenze auf das Upload-Limit als base64 an (D65).
 
 ## 6. Konfiguration
 
 - Config-Flow: E-Mail, App-Passwort, Hosts/Ports (Voreinstellung GMX), Prüfung von IMAP- und SMTP-Login. Reauth, Reconfigure, Options-Flow.
-- Optionen: `enabled_tools`, Versandmodus, Allowlist, Antworten an den Absender, Absendername, Gesendet-Kopie, Limits (aus `const.py`/`options.py` der Vorlage, M5), Größenlimits, Löschen (M4), Ordner-Overrides, Audit-Aufbewahrung.
+- Optionen: `enabled_tools`, Versandmodus, Allowlist, Antworten an den Absender, Absendername, Gesendet-Kopie, Limits (M5), Größenlimits, Löschen (M4), Audit-Aufbewahrung. Ordner-Overrides werden gelesen, aber nicht im Formular angeboten (D64).
+- Diagnose ohne Zugangsdaten und Adressen (D63).
 - Verbindungs-URL (extern/Nabu Casa, sonst intern; wie ha-mcp auf dem Konfigurieren-Bildschirm) und eine Kopiervorlage für Claude Code werden im Options-Flow angezeigt (kein Token), D22.
 
 ## 7. Tests
@@ -115,9 +120,9 @@ Weitere IMAP-Möglichkeiten für „vollumfänglich“ (D13): Threads (`THREAD=O
 | M1 | Config-Flow, Optionen, Verbindungsverwaltung (aus `client/imap.py`), Endpunkt, Tool-Registry mit Einzelschaltern, Benutzerprüfung. |
 | M2 | Lesetools inkl. `get_attachment` (ganze Datei). |
 | M3 | Organisieren und Entwürfe (Stufe O). **Stand 24.11.2026:** gebaut (0.0.5), Live-Test bestanden – siehe `docs/M3.md`. |
-| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test offen – siehe `docs/M4.md`. |
-| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test offen – siehe `docs/M5.md`. |
-| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0. |
+| M4 | Löschen (Stufe D) mit Vorschau/Code, Audit-Log. **Stand 24.11.2026:** gebaut (0.0.6), Live-Test bestanden (mit 0.0.7) – siehe `docs/M4.md`. |
+| M5 | Senden (Stufe S), Gesendet-Kopie, Limits. **Stand 24.11.2026:** gebaut (0.0.7), Live-Test bestanden – siehe `docs/M5.md`. |
+| M6 | Härtung, Anleitung, CI (hassfest, HACS), Release 0.1.0 (erstes GitHub-Release, D57). **Stand 26.11.2026:** gebaut (0.1.0), Live-Test der neuen Punkte und Release offen – siehe `docs/M6.md`. |
 
 Je Meilenstein: Tests grün, Bericht, Freigabe des Nutzers.
 

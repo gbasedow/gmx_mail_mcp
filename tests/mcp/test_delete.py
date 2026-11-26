@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import time
 from collections.abc import Generator
 from typing import Any
 from unittest.mock import patch
@@ -221,8 +222,8 @@ async def test_permanent_delete_two_steps(server: McpServer, imap: FakeImapServe
     ]
     # The fingerprint covers the arguments without the code, so a preview and its execution can be matched.
     by_outcome = {e["outcome"]: e["hash"] for e in context.audit.latest(10) if e["outcome"] in ("preview", "ok")}
-    assert by_outcome["preview"] == fingerprint({"refs": [tref(2), tref(1)]})
-    assert by_outcome["ok"] == fingerprint({"refs": [tref(1), tref(2)]})
+    assert by_outcome["preview"] == fingerprint("gmx_delete_permanently", {"refs": [tref(2), tref(1)]})
+    assert by_outcome["ok"] == fingerprint("gmx_delete_permanently", {"refs": [tref(1), tref(2)]})
 
 
 @pytest.mark.parametrize("options", [{CONF_ALLOW_PERMANENT_DELETE: True}])
@@ -432,8 +433,16 @@ def test_audit_folder_names_and_fingerprint() -> None:
     arguments = {"refs": [ref(1), ref(2, "Archiv")], "target": "Ziel\u202e", "confirm_token": "abc"}
     entry = log.record(tool="t", level="organize", outcome="ok", arguments=arguments, folders=["Spamverdacht"])
     assert entry["folders"] == ["Archiv", "INBOX", "Spamverdacht", "Ziel"]  # cleaned, sorted, unique
-    assert entry["hash"] == fingerprint({k: v for k, v in arguments.items() if k != "confirm_token"})
+    assert entry["hash"] == fingerprint("t", {k: v for k, v in arguments.items() if k != "confirm_token"})
     assert len(entry["hash"]) == 16
+
+
+def test_fingerprint_depends_on_the_tool() -> None:
+    log = AuditLog()
+    arguments = {"refs": [ref(1)]}
+    trashed = log.record(tool="gmx_trash", level="delete", outcome="ok", arguments=arguments)
+    deleted = log.record(tool="gmx_delete_permanently", level="delete", outcome="ok", arguments=arguments)
+    assert trashed["hash"] != deleted["hash"]
 
 
 def test_delete_counter_rolls_over_and_restores() -> None:
@@ -456,14 +465,14 @@ def test_delete_counter_rolls_over_and_restores() -> None:
 async def test_rename_keeps_unsubscribed_state(server: McpServer, imap: FakeImapServer) -> None:
     imap.subscribed = {"INBOX"}
     result = await call(server, "gmx_rename_folder", {"folder": "Archiv", "new_name": "Ablage"})
-    assert result["data"]["warnings"] == []
+    assert result["data"]["warnings"] == [] and result["data"]["data"]["subscribed"] is False
     assert imap.subscribed == {"INBOX"}
 
 
 async def test_rename_without_lsub_warns(server: McpServer, imap: FakeImapServer) -> None:
     imap.lsub_error = IMAPClientError("LSUB failed")
     result = await call(server, "gmx_rename_folder", {"folder": "Archiv", "new_name": "Ablage"})
-    assert result["data"]["data"]["path"] == "Ablage"
+    assert result["data"]["data"]["path"] == "Ablage" and "subscribed" not in result["data"]["data"]
     assert result["data"]["warnings"] == ["subscription_unknown"]
 
 
@@ -474,3 +483,67 @@ async def test_create_folder_warns_when_subscribe_fails(server: McpServer, imap:
     assert result["data"]["data"] == {"path": "Neu", "subscribed": False}
     assert result["data"]["warnings"] == ["subscribe_failed"]
     assert ("create", "Neu") in imap.commands
+
+
+# --------------------------------------------------------------------------- uniform preview count, timeout (D61)
+
+
+async def test_folder_preview_counts_the_folder(server: McpServer, context: ToolContext, imap: FakeImapServer) -> None:
+    await call(server, "gmx_delete_folder", {"folder": "Archiv"})
+    entry = context.audit.latest(1)[0]
+    assert (entry["outcome"], entry["count"]) == ("preview", 1)
+
+
+def _slow_worker(context: ToolContext, delay: float) -> tuple[ToolContext, list[bool]]:
+    """A context whose IMAP work runs in a thread and, once switched on, sleeps first (event loop stays free)."""
+    switch = [False]
+
+    async def threaded(func: Any, *args: Any) -> Any:
+        def job() -> Any:
+            if switch[0]:
+                time.sleep(delay)
+            return func(*args)
+
+        return await asyncio.to_thread(job)
+
+    settings = ImapSettings(host="imap.gmx.net", port=993, security=Security.SSL, username=EMAIL, password=PASSWORD)
+    worker = ImapWorker(settings, executor=threaded, ssl_context_factory=ssl.create_default_context, limiter=ConnectionLimiter())
+    slow = ToolContext(worker=worker, options=context.options, executor=_inline, account="Konto A", email=EMAIL, audit=context.audit)
+    return slow, switch
+
+
+@pytest.mark.parametrize(
+    ("tool", "arguments", "expected_count"),
+    [
+        ("gmx_trash", {"refs": [ref(1), ref(2)]}, 2),
+        ("gmx_delete_permanently", {"refs": [tref(1)]}, 1),
+        ("gmx_delete_folder", {"folder": "Archiv"}, 1),
+    ],
+)
+@pytest.mark.parametrize(
+    "options",
+    [{CONF_ALLOW_PERMANENT_DELETE: True, CONF_TOOLS_WITHOUT_CONFIRMATION: ["gmx_delete_permanently", "gmx_delete_folder"]}],
+)
+async def test_timeout_during_deleting_lets_it_finish_and_records_it(
+    context: ToolContext, imap: FakeImapServer, tool: str, arguments: dict[str, Any], expected_count: int
+) -> None:
+    slow, switch = _slow_worker(context, 0.4)
+    tools = build_tools(slow)
+    mcp = McpServer(name="t", version="1", tools=lambda: tools, call_timeout=0.2)
+    await call(mcp, "gmx_list_folders", {})  # connect and learn the folders at normal speed
+    switch[0] = True
+    outcome = await mcp.handle_message(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments}}
+    )
+    assert outcome.body is not None and outcome.body["result"]["isError"]
+    for _ in range(60):
+        if any(e["outcome"].startswith("late_") for e in context.audit.latest(5)):
+            break
+        await asyncio.sleep(0.05)
+    entries = context.audit.latest(5)
+    assert [e["outcome"] for e in entries[:2]] == ["late_ok", "cancelled"]
+    assert entries[0]["count"] == expected_count and entries[0]["hash"] == entries[1]["hash"]
+    if tool == "gmx_delete_folder":
+        assert "Archiv" not in imap.mailboxes
+    else:
+        assert slow.deletes.used == expected_count

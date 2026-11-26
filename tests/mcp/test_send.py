@@ -61,7 +61,7 @@ def imap() -> Generator[FakeImapServer]:
     drafts = server.mailbox("Entwürfe", DRAFTS_VALIDITY)
     draft = (
         b"From: alt@example.org\r\nTo: Anna <anna@example.org>\r\nBcc: chef@firma.de\r\nSubject: Entwurf\r\n"
-        b"Message-ID: <d1@gmx.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHallo Anna\r\n"
+        b"Message-ID: <d1@gmx.test>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nHallo Anna\r\nZweite Zeile\r\n"
     )
     with patch("custom_components.gmx_mail_mcp.client.imap.IMAPClient", server):
         client = server("imap.gmx.net", 993)
@@ -227,6 +227,27 @@ async def test_mode_any_allows_every_address_without_a_wildcard(server: McpServe
     result = await send_confirmed(server, "gmx_send_message", {"to": ["wer@irgendwo.example"], "subject": "x", "body_text": "y"})
     assert not result["is_error"], result
     assert [d[1] for d in smtp.delivered] == [["wer@irgendwo.example"]]
+
+
+@pytest.mark.parametrize("options", [{"send_mode": "any", "allowlist": []}])
+async def test_mode_any_is_shown_in_preview_and_answer(server: McpServer, smtp: FakeSmtpServer) -> None:
+    args = {"to": ["wer@irgendwo.example"], "subject": "x", "body_text": "y"}
+    preview = await call(server, "gmx_send_message", args)
+    assert preview["data"]["data"]["send_mode"] == "any"
+    assert "recipients_unrestricted" in preview["data"]["warnings"]
+    sent = await call(server, "gmx_send_message", {**args, "confirm_token": preview["data"]["data"]["confirm_token"]})
+    assert sent["data"]["data"]["send_mode"] == "any" and sent["data"]["data"]["sent"] is True
+    assert sent["data"]["warnings"].count("recipients_unrestricted") == 1
+
+
+@pytest.mark.parametrize("options", [ALLOW])
+async def test_allowlist_mode_is_shown_without_a_warning(server: McpServer, smtp: FakeSmtpServer) -> None:
+    args = {"to": ["anna@example.org"], "subject": "x", "body_text": "y"}
+    preview = await call(server, "gmx_send_message", args)
+    assert preview["data"]["data"]["send_mode"] == "allowlist"
+    assert "recipients_unrestricted" not in preview["data"]["warnings"]
+    sent = await call(server, "gmx_send_message", {**args, "confirm_token": preview["data"]["data"]["confirm_token"]})
+    assert sent["data"]["data"]["send_mode"] == "allowlist" and "recipients_unrestricted" not in sent["data"]["warnings"]
 
 
 @pytest.mark.parametrize("options", [{"send_mode": "allowlist", "allowlist": ["*"]}])
@@ -564,6 +585,7 @@ async def test_send_draft_sends_it_unchanged_and_removes_it(server: McpServer, s
     preview = (await call(server, "gmx_send_draft", {"ref": dref(1)}))["data"]["data"]
     assert preview["preview"]["to"] == ["anna@example.org"] and preview["preview"]["bcc"] == ["chef@firma.de"]
     assert preview["preview"]["draft"] == dref(1)
+    assert "Hallo Anna\nZweite Zeile" in preview["preview"]["text_start"] and "\r" not in preview["preview"]["text_start"]
     assert 1 in imap.mailboxes["Entwürfe"].messages
     sent = await call(server, "gmx_send_draft", {"ref": dref(1), "confirm_token": preview["confirm_token"]})
     assert not sent["is_error"], sent
@@ -613,7 +635,7 @@ async def test_audit_has_domains_but_no_addresses_subjects_or_content(server: Mc
         ("gmx_send_message", "ok"),
         ("gmx_send_message", "preview"),
     ]
-    assert entries[0]["recipient_domains"] == ["firma.de"] and entries[0]["folders"] == ["INBOX"]
+    assert entries[0]["recipient_domains"] == ["firma.de"] and entries[0]["folders"] == ["Gesendet", "INBOX"]
     assert entries[2]["count"] == 1 and entries[2]["confirmation"] == "code" and entries[2]["user"] == "user-1"
     dump = json.dumps(entries, ensure_ascii=False)
     for secret in ("anna", "@", SECRET_SUBJECT, SECRET_TEXT, "Geheimer", "x@firma"):

@@ -209,7 +209,7 @@ async def test_folder_tools(server: McpServer, imap: FakeImapServer) -> None:
     assert created["data"]["data"] == {"path": "Archiv/Rechnungen", "subscribed": True}
     assert "Archiv/Rechnungen" in imap.subscribed
     renamed = await call(server, "gmx_rename_folder", {"folder": "Archiv/Rechnungen", "new_name": "Belege"})
-    assert renamed["data"]["data"] == {"old_path": "Archiv/Rechnungen", "path": "Archiv/Belege"}
+    assert renamed["data"]["data"] == {"old_path": "Archiv/Rechnungen", "path": "Archiv/Belege", "subscribed": True}
     assert renamed["data"]["warnings"] == []
     # The subscription moved with the folder; the old name is no longer subscribed.
     assert "Archiv/Belege" in imap.subscribed

@@ -211,6 +211,10 @@
     "smtp_auth_failed": {
       "title": "GMX hat die SMTP-Anmeldung für {account} abgelehnt",
       "description": "Das Senden ist gescheitert, weil GMX die Anmeldung abgelehnt hat (App-Passwort widerrufen oder geändert). Es wurde nichts gesendet. Die Integration mit einem gültigen App-Passwort neu anmelden."
+    },
+    "send_mode_any": {
+      "title": "Senden an beliebige Adressen für {account} eingeschaltet",
+      "description": "Im Optionsdialog steht „Wer darf Mails erhalten“ auf „Beliebige Adressen“: Die eingeschalteten Sende-Tools können an jede Adresse senden, die Allowlist wird nicht geprüft. Wenn das nicht beabsichtigt ist: Einstellungen > Geräte & Dienste > GMX Mail MCP > Konfigurieren, „Nur Allowlist“ wählen, eigene Adressen eintragen und speichern. Der Hinweis bleibt, solange „Beliebige Adressen“ gewählt ist."
     }
   }
 }

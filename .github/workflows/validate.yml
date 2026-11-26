@@ -9,6 +9,19 @@ permissions:
   contents: read
 
 jobs:
+  version:
+    # Manifest version, newest CHANGELOG entry and (on a tag) the tag must agree.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Version check
+        env:
+          TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: python tools/check_version.py --tag "$TAG"
+
   hassfest:
     runs-on: ubuntu-latest
     steps:

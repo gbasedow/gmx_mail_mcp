@@ -104,7 +104,8 @@ def _content(part: Any) -> str:
         content = part.get_content()
     except LookupError, ValueError:
         return ""
-    return content if isinstance(content, str) else ""
+    # Drafts from the server keep CRLF line ends; the preview shows plain line breaks.
+    return content.replace("\r\n", "\n").replace("\r", "\n") if isinstance(content, str) else ""
 
 
 def _header_addresses(message: EmailMessage, name: str) -> list[str]:

@@ -569,6 +569,7 @@ async def test_m4_tools_end_to_end(mailer: IMAPClient, folder: str) -> None:
         assert created_path in {name for _f, _d, name in mailer.list_sub_folders()}
         renamed = await call("gmx_rename_folder", {"folder": created_path, "new_name": f"{created_path}-2"})
         created_path = renamed["path"]
+        assert renamed["subscribed"] is True
         subscribed = {name for _f, _d, name in mailer.list_sub_folders()}
         assert created_path in subscribed and f"{folder}-neu" not in subscribed
         folder_preview = await call("gmx_delete_folder", {"folder": created_path})

@@ -92,7 +92,6 @@ class FolderRole(StrEnum):
     JUNK = "junk"
 
 
-CONF_PERMISSIONS: Final = "permissions"
 CONF_SEND_MODE: Final = "send_mode"
 CONF_ALLOWLIST: Final = "allowlist"
 CONF_ALLOW_REPLY_TO_SENDER: Final = "allow_reply_to_sender"
@@ -104,25 +103,14 @@ CONF_MAX_DELETE_PER_DAY: Final = "max_delete_per_day"
 CONF_MAX_RECIPIENTS_PER_HOUR: Final = "max_recipients_per_hour"
 CONF_MAX_MESSAGE_SIZE_MB: Final = "max_message_size_mb"
 CONF_SENDER_NAME: Final = "sender_name"
-CONF_POLL_INTERVAL: Final = "poll_interval"
-CONF_IDLE_ENABLED: Final = "idle_enabled"
-CONF_IDLE_RENEW_MINUTES: Final = "idle_renew_minutes"
 CONF_FOLDER_SENT: Final = "folder_sent"
 CONF_FOLDER_DRAFTS: Final = "folder_drafts"
 CONF_FOLDER_TRASH: Final = "folder_trash"
 CONF_FOLDER_JUNK: Final = "folder_junk"
-CONF_EVENT_INCLUDE_HEADERS: Final = "event_include_headers"
 CONF_SENT_COPY_MODE: Final = "sent_copy_mode"
 CONF_AUDIT_RETENTION_DAYS: Final = "audit_retention_days"
 CONF_TOOLS_WITHOUT_CONFIRMATION: Final = "tools_without_confirmation"  # D45
-CONF_ATTACHMENT_RETENTION_DAYS: Final = "attachment_retention_days"
 
-SECTION_PERMISSIONS: Final = "permissions_section"
-SECTION_SENDING: Final = "sending_section"
-SECTION_LIMITS: Final = "limits_section"
-SECTION_CONNECTION: Final = "connection_section"
-SECTION_FOLDERS: Final = "folders_section"
-SECTION_PRIVACY: Final = "privacy_section"
 
 FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
     FolderRole.SENT: CONF_FOLDER_SENT,
@@ -136,7 +124,6 @@ FOLDER_OVERRIDE_KEYS: Final[dict[FolderRole, str]] = {
 # GMX does not publish its own sending limits (GMX-NOTES row 20); high values risk an account block.
 DEFAULT_MAX_RECIPIENTS: Final = 10
 DEFAULT_MAX_SEND_PER_DAY: Final = 20
-DEFAULT_MAX_DELETE_PER_DAY: Final = 0  # 0 = no daily limit (D39)
 # Third-party claim "max. 11 recipients per hour from a mail client" (GMX-NOTES row 20, unconfirmed) -> stay below it.
 DEFAULT_MAX_RECIPIENTS_PER_HOUR: Final = 10
 # Attachment limit of GMX FreeMail (GMX-NOTES row 19); ProMail 50 MB, TopMail 100 MB. SMTP SIZE allows ~135 MiB.
@@ -144,46 +131,13 @@ DEFAULT_MAX_MESSAGE_SIZE_MB: Final = 20
 MAX_MESSAGE_SIZE_MB: Final = 100
 MAX_SENDER_NAME: Final = 100
 
-POLL_INTERVAL_MIN_S: Final = 60
-POLL_INTERVAL_MAX_S: Final = 3600
-DEFAULT_POLL_INTERVAL_S: Final = 300
 # GMX drops idle connections after ~30 min (M0) -> IDLE must be renewed after at most 25 min.
-IDLE_RENEW_MIN_MINUTES: Final = 5
-IDLE_RENEW_MAX_MINUTES: Final = 25
-DEFAULT_IDLE_RENEW_MINUTES: Final = 24
 AUDIT_RETENTION_MIN_DAYS: Final = 1
 AUDIT_RETENTION_MAX_DAYS: Final = 365
 DEFAULT_AUDIT_RETENTION_DAYS: Final = 90
-ATTACHMENT_RETENTION_MAX_DAYS: Final = 365
-DEFAULT_ATTACHMENT_RETENTION_DAYS: Final = 7  # 0 = never delete saved attachments
 
 ALLOWLIST_WILDCARD: Final = "*"
 
-DEFAULT_OPTIONS: Final[dict[str, object]] = {
-    CONF_PERMISSIONS: [Permission.READ.value],
-    CONF_SEND_MODE: SendMode.ALLOWLIST.value,  # with an empty allowlist nothing can be sent (D46)
-    CONF_ALLOWLIST: [],
-    CONF_ALLOW_REPLY_TO_SENDER: False,
-    CONF_ALLOW_PERMANENT_DELETE: False,
-    CONF_ALLOW_HTML_OUTPUT: False,
-    CONF_MAX_RECIPIENTS: DEFAULT_MAX_RECIPIENTS,
-    CONF_MAX_SEND_PER_DAY: DEFAULT_MAX_SEND_PER_DAY,
-    CONF_MAX_DELETE_PER_DAY: DEFAULT_MAX_DELETE_PER_DAY,
-    CONF_MAX_RECIPIENTS_PER_HOUR: DEFAULT_MAX_RECIPIENTS_PER_HOUR,
-    CONF_MAX_MESSAGE_SIZE_MB: DEFAULT_MAX_MESSAGE_SIZE_MB,
-    CONF_SENDER_NAME: "",
-    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL_S,
-    CONF_IDLE_ENABLED: True,
-    CONF_IDLE_RENEW_MINUTES: DEFAULT_IDLE_RENEW_MINUTES,
-    CONF_FOLDER_SENT: "",
-    CONF_FOLDER_DRAFTS: "",
-    CONF_FOLDER_TRASH: "",
-    CONF_FOLDER_JUNK: "",
-    CONF_EVENT_INCLUDE_HEADERS: False,
-    CONF_SENT_COPY_MODE: SentCopyMode.APPEND.value,
-    CONF_AUDIT_RETENTION_DAYS: DEFAULT_AUDIT_RETENTION_DAYS,
-    CONF_ATTACHMENT_RETENTION_DAYS: DEFAULT_ATTACHMENT_RETENTION_DAYS,
-}
 
 # --------------------------------------------------------------------------- connection handling
 
@@ -202,17 +156,12 @@ BACKOFF_JITTER: Final = 0.2  # +/- 20 %
 
 IDLE_ACK_TIMEOUT_S: Final = 10.0
 IDLE_PUSH_GRACE_S: Final = 30.0  # extra wait beyond the renewal timer before assuming the connection hangs
-MAX_NEW_MESSAGE_EVENTS: Final = 20  # per update; more are counted but not announced (flood protection)
-REFRESH_COOLDOWN_S: Final = 5.0
 
-EVENT_NEW_MESSAGE: Final = "gmx_mail_new_message"
-EVENT_ACTION_EXECUTED: Final = "gmx_mail_action_executed"
 
 # --------------------------------------------------------------------------- organising (M4)
 
 MAX_REFS_PER_CALL: Final = 100
 MAX_DELETE_PER_CALL: Final = 50  # trash / delete_permanently per call (SPEC section 5, measure 5)
-ATTACHMENT_CLEANUP_TIME: Final = (3, 17, 0)  # local time, once a day
 
 
 class PushState(StrEnum):
@@ -231,7 +180,5 @@ class PushState(StrEnum):
 
 ISSUE_IMAP_POSSIBLY_DISABLED: Final = "imap_possibly_disabled"
 ISSUE_NEW_TOOLS: Final = "new_tools_available"
-ISSUE_UIDVALIDITY_CHANGED: Final = "uidvalidity_changed"
-ISSUE_FOLDER_MAPPING_AMBIGUOUS: Final = "folder_mapping_ambiguous"
-ISSUE_SERVER_RULES_UNAVAILABLE: Final = "server_rules_unavailable"
 ISSUE_SMTP_AUTH_FAILED: Final = "smtp_auth_failed"
+ISSUE_SEND_MODE_ANY: Final = "send_mode_any"

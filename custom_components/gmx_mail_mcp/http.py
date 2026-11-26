@@ -4,6 +4,9 @@ Order per request: bearer token, checked with Home Assistant's own validation (`
 failures count for HA's IP ban) -> entry loaded (404) -> the HA user chosen for the entry (D9, 403 otherwise) -> transport
 rules. Authentication comes first, so without a token nothing is revealed about which entries exist. Tokens are read from the
 Authorization header only. GET (server-sent events) and DELETE (sessions) are not offered: 405.
+
+Request size: Home Assistant accepts at most 16 MiB per request. Files for drafts and sending come base64-encoded in the
+call (D17), so for the admitted user only the limit is raised to fit the upload limit of the options (D65).
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlsplit
 
 from aiohttp import web
@@ -19,7 +22,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers.http import KEY_HASS, HomeAssistantView
 
 from .auth import AuthOutcome, async_unauthorized, authenticate
-from .const import DOMAIN
+from .const import CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB, DOMAIN, MAX_UPLOAD_MB
 from .mcp.protocol import REQUEST_USER, SUPPORTED_PROTOCOL_VERSIONS, MessageKind, parse_error
 
 if TYPE_CHECKING:
@@ -32,6 +35,19 @@ _LOGGER = logging.getLogger(__name__)
 MCP_URL: Final = "/api/gmx_mail_mcp/{entry_id}/mcp"
 HEADER_PROTOCOL_VERSION: Final = "MCP-Protocol-Version"
 CONTENT_TYPE_JSON: Final = "application/json"
+HA_MAX_REQUEST_BYTES: Final = 16 * 1024 * 1024  # Home Assistant's default for every request
+# Room for the JSON around the files: text (100 000 characters), HTML (200 000), addresses, escaping.
+REQUEST_OVERHEAD_BYTES: Final = 2 * 1024 * 1024
+
+
+def max_request_bytes(upload_mb: Any) -> int:
+    """Largest request the admitted user may send: the upload limit as base64 plus room for the rest (D65)."""
+    try:
+        megabytes: int = min(max(int(upload_mb), 1), MAX_UPLOAD_MB)
+    except TypeError, ValueError:
+        megabytes = DEFAULT_MAX_UPLOAD_MB
+    base64_bytes = -(-megabytes * 1024 * 1024 // 3) * 4
+    return max(HA_MAX_REQUEST_BYTES, base64_bytes + REQUEST_OVERHEAD_BYTES)
 
 
 def endpoint_path(entry_id: str) -> str:
@@ -54,6 +70,8 @@ class McpView(HomeAssistantView):
             return entry
         if (rejection := _check_transport(request)) is not None:
             return rejection
+        # Only after authentication: a larger body is accepted from the admitted user alone (as HA's file_upload does).
+        request._client_max_size = max_request_bytes(entry.options.get(CONF_MAX_UPLOAD_MB, DEFAULT_MAX_UPLOAD_MB))  # noqa: SLF001
 
         try:
             message = json.loads(await request.read())
