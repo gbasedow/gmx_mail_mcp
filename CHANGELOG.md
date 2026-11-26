@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen. Versionen vor 0.1.0 wurden nicht als GitHub-Release veröffentlicht (D57).
 
+## 0.1.1 – 2026-11-26
+
+- `gmx_create_folder` legt Unterordner auch unter Standardordnern an, soweit der Server sie zulässt – bei GMX unter dem Posteingang;
+  unter dem Papierkorb weiterhin nicht (D70).
+
 ## 0.1.0 – 2026-11-26
 
 Erstes Release (M6: Härtung, Anleitung, Release). Details: `docs/M6.md`.

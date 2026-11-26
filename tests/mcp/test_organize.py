@@ -228,6 +228,7 @@ async def test_folder_tools(server: McpServer, imap: FakeImapServer) -> None:
         ("gmx_create_folder", {"name": "a/b"}, "invalid_folder_name"),
         ("gmx_create_folder", {"name": "Archiv"}, "folder_exists"),
         ("gmx_create_folder", {"name": "x", "parent": "Gesendet"}, "protected_folder"),
+        ("gmx_create_folder", {"name": "x", "parent": "Gelöscht"}, "protected_folder"),
         ("gmx_rename_folder", {"folder": "Gelöscht", "new_name": "Papierkorb"}, "protected_folder"),
         ("gmx_rename_folder", {"folder": "INBOX", "new_name": "Eingang"}, "protected_folder"),
         ("gmx_rename_folder", {"folder": "Fehlt", "new_name": "x"}, "folder_not_found"),
@@ -298,3 +299,14 @@ async def test_save_draft_upload_limit(server: McpServer, imap: FakeImapServer, 
     result = await call(server, "gmx_save_draft", {"body_text": "x", "attachments": [_file(big, "gross.bin")]})
     assert (result["data"]["error"], result["data"]["index"]) == ("attachment_too_large", 0)
     assert not imap.appended
+
+
+async def test_subfolder_below_inbox_is_an_ordinary_folder(server: McpServer, imap: FakeImapServer) -> None:
+    """D70: INBOX may have subfolders; the special folders keep their roles; messages can be moved there."""
+    created = await call(server, "gmx_create_folder", {"name": "Rechnungen", "parent": "INBOX"})
+    assert created["data"]["data"] == {"path": "INBOX/Rechnungen", "subscribed": True}
+    folders = (await call(server, "gmx_list_folders", {}))["data"]["data"]["folders"]
+    by_path = {f["path"]: f for f in folders}
+    assert by_path["INBOX/Rechnungen"]["role"] is None and by_path["INBOX"]["role"] == "inbox"
+    moved = await call(server, "gmx_move", {"refs": [ref(1)], "target": "INBOX/Rechnungen"})
+    assert not moved["is_error"] and moved["data"]["data"]["new_refs"][0]["folder"] == "INBOX/Rechnungen"

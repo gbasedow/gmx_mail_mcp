@@ -6,7 +6,7 @@ Home-Assistant-Integration, die ein GMX-Postfach als **MCP-Server** bereitstellt
 der Claude-App oder Claude Code) kann damit über IMAP und SMTP mit dem Postfach arbeiten: Ordner, Suche, Lesen, ganze
 Anhänge, Flags, Verschieben, Löschen, Entwürfe, Senden, Antworten, Weiterleiten.
 
-Version 0.1.0. Getestet gegen ein echtes GMX-FreeMail-Konto und Home Assistant 2026.11.
+Version 0.1.1. Getestet gegen ein echtes GMX-FreeMail-Konto und Home Assistant 2026.11.
 
 **Schutz auf zwei Ebenen:** Zugriff nur mit der Anmeldung eines bestimmten Home-Assistant-Benutzers, und **jedes Tool ist
 einzeln ein- und ausschaltbar**. In der Voreinstellung sind nur lesende Tools an.
@@ -35,7 +35,7 @@ Stufen: **R** lesen · **O** organisieren · **D** löschen · **S** senden. Vor
 | Stufe | Tools | Kurz |
 |---|---|---|
 | R | `gmx_get_status`, `gmx_list_folders`, `gmx_search`, `gmx_get_message`, `gmx_get_attachment`, `gmx_get_raw_message`, `gmx_get_thread`, `gmx_list_keywords`, `gmx_get_audit_log` | Status, Ordner, Suche, Mail lesen (ohne sie als gelesen zu markieren), Anhänge als Text oder ganze Datei, Original (.eml), Verlauf, Schlagwörter, Audit-Log |
-| O | `gmx_set_flags`, `gmx_move`, `gmx_copy`, `gmx_mark_spam`, `gmx_mark_not_spam`, `gmx_create_folder`, `gmx_rename_folder`, `gmx_subscribe_folder`, `gmx_save_draft` | Flags und Schlagwörter, Verschieben/Kopieren (nicht in den Papierkorb), Spam, Ordner anlegen/umbenennen/abonnieren, Entwurf mit Anhängen |
+| O | `gmx_set_flags`, `gmx_move`, `gmx_copy`, `gmx_mark_spam`, `gmx_mark_not_spam`, `gmx_create_folder`, `gmx_rename_folder`, `gmx_subscribe_folder`, `gmx_save_draft` | Flags und Schlagwörter, Verschieben/Kopieren (nicht in den Papierkorb), Spam, Ordner anlegen (auch unter dem Posteingang, nie unter dem Papierkorb)/umbenennen/abonnieren, Entwurf mit Anhängen |
 | D | `gmx_trash`, `gmx_delete_permanently`, `gmx_delete_folder` | Papierkorb (umkehrbar), endgültig löschen (nur aus Papierkorb/Spam, mit Bestätigung), leere Ordner löschen (mit Bestätigung) |
 | S | `gmx_send_message`, `gmx_reply`, `gmx_forward`, `gmx_send_draft` | Neue Mail, Antwort, Weiterleitung mit Anhängen, Entwurf senden – jeweils mit Vorschau und Bestätigung |
 
@@ -159,6 +159,8 @@ Text, kann aber nicht garantieren, dass ein Modell darauf nicht hereinfällt. De
   Dateien muss das Modell als base64 ausgeben – große Dateien sind langsam und belasten den Chat. Claude Code kommt mit größeren
   Dateien zurecht.
 - Ordner abonnieren: GMX abonniert per IMAP angelegte Ordner nicht selbst; die Integration erledigt das beim Anlegen und Umbenennen.
+- Unterordner: unter eigenen Ordnern und unter dem Posteingang möglich. Unter Entwürfe, Gesendet und Spamverdacht lässt GMX keine
+  Unterordner zu; unter dem Papierkorb sperrt die Integration sie (Schutz rund ums Löschen).
 
 ## Fehlersuche und Diagnose
 

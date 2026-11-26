@@ -547,3 +547,13 @@ async def test_timeout_during_deleting_lets_it_finish_and_records_it(
         assert "Archiv" not in imap.mailboxes
     else:
         assert slow.deletes.used == expected_count
+
+
+async def test_subfolder_below_inbox_can_be_deleted_inbox_cannot(server: McpServer, imap: FakeImapServer) -> None:
+    """D70: a subfolder of INBOX is an ordinary folder for deleting; INBOX itself stays protected."""
+    await call(server, "gmx_create_folder", {"name": "Leer", "parent": "INBOX"})
+    preview = (await call(server, "gmx_delete_folder", {"folder": "INBOX/Leer"}))["data"]["data"]
+    done = await call(server, "gmx_delete_folder", {"folder": "INBOX/Leer", "confirm_token": preview["confirm_token"]})
+    assert done["data"]["data"]["deleted_folder"] == "INBOX/Leer" and "INBOX/Leer" not in imap.mailboxes
+    refused = await call(server, "gmx_delete_folder", {"folder": "INBOX"})
+    assert refused["is_error"] and refused["data"]["error"] == "protected_folder"

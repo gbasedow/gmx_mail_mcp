@@ -19,5 +19,5 @@
     "imapclient==4.3.0",
     "pypdf==7.1.1"
   ],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

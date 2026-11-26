@@ -35,6 +35,7 @@ Hinweis zur Sprache des Nutzers: „HonorSystem“ = Home Assistant, „FTP“ z
 - **M6 vorhanden (0.1.0, Live-Test bestanden 26.11.2026; GitHub-Release offen):** Löschen läuft nach Abbruch zu Ende (D61), Versandmodus sichtbar mit Reparaturhinweis (D60),
   Diagnose ohne Adressen (D63), Anfragegröße passend zum Upload-Limit (D65), Vorlagenreste entfernt (D64), deutsche Anleitung `README.md` (D66), `CHANGELOG.md`,
   Versionsprüfung in der CI (D67). Bericht `docs/M6.md`.
+- **0.1.1:** Unterordner auch unter Standardordnern, soweit der Server sie zulässt (bei GMX: Posteingang), nie unter dem Papierkorb (D70; Live-Test offen, GMX-NOTES Zeile 51).
 - **Nicht vorhanden:** `.eml` hochladen (D34, D59: zurückgestellt), MCP `2026-07-28` (D68). Keine Sensoren/Ereignisse in v1. Aus der Vorlage **nicht** kopiert, weil an HA-Aktionen gebunden:
   `services.py`, `attachments.py`, `audit.py`, `coordinator.py`, `config_flow.py`, Sensoren. Dort als Vorbild lesen, nicht blind übernehmen.
 - Die alte Entscheidung „kein eigener MCP-Server“ (Vorlage, DECISIONS Nr. 1) gilt hier **nicht mehr**.

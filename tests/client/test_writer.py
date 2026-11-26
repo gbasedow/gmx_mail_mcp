@@ -232,9 +232,12 @@ def test_create_folder(server: FakeImapServer) -> None:
     folder_map = _folder_map(server)
     assert create_folder(session, GMX_INFO, folder_map, "Rechnungen", None) == "Rechnungen"
     assert create_folder(session, GMX_INFO, folder_map, " 2026 ", "Rechnungen") == "Rechnungen/2026"
-    for parent in ("Gesendet", "Spamverdacht", "Entwürfe"):
+    for parent in ("Gesendet", "Spamverdacht", "Entwürfe", "Gelöscht"):  # \\NoInferiors at GMX; the trash by rule (D70)
         with pytest.raises(GmxProtectedFolderError):
             create_folder(session, GMX_INFO, folder_map, "x", parent)
+    # INBOX may have subfolders (D70); they are ordinary folders.
+    assert create_folder(session, GMX_INFO, folder_map, "Rechnungen", "INBOX") == "INBOX/Rechnungen"
+    assert rename_folder(session, GMX_INFO, folder_map, "INBOX/Rechnungen", "Belege") == "INBOX/Belege"
     with pytest.raises(GmxFolderNotFoundError):
         create_folder(session, GMX_INFO, folder_map, "x", "Nope")
     for bad in ("", "a/b", "50%", "a*", "..", "x" * 101, "tab\tname"):

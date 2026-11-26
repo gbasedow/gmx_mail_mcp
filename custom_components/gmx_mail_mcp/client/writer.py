@@ -358,7 +358,11 @@ def _special_names(folder_map: FolderMap) -> set[str]:
 
 
 def create_folder(session: ImapSession, info: ServerInfo, folder_map: FolderMap, name: str, parent: str | None) -> str:
-    """Create a folder (optionally below ``parent``); never below special folders or folders without children."""
+    """Create a folder (optionally below ``parent``).
+
+    Allowed below every folder the server lets have children (no ``\\NoInferiors``), INBOX and special folders included,
+    except the trash: subfolders there would blur the rules for deleting (D70).
+    """
     cleaned = _validate_name(name)
     folders = {f.name: f for f in parse_folder_list(session.list_folders())}
     delimiter = next((f.delimiter for f in folders.values() if f.delimiter), "/")
@@ -367,8 +371,8 @@ def create_folder(session: ImapSession, info: ServerInfo, folder_map: FolderMap,
         parent_folder = folders.get(parent)
         if parent_folder is None:
             raise GmxFolderNotFoundError("parent not found")
-        if parent in _special_names(folder_map) or any(flag.lower() == "\\noinferiors" for flag in parent_folder.flags):
-            raise GmxProtectedFolderError("special_folder")
+        if parent == folder_map.get(FolderRole.TRASH) or any(flag.lower() == "\\noinferiors" for flag in parent_folder.flags):
+            raise GmxProtectedFolderError("no_subfolders")
         path = f"{parent}{delimiter}{cleaned}"
     if path in folders or path.upper() == "INBOX":
         raise GmxFolderExistsError("exists")
